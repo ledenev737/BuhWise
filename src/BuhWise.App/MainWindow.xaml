@@ -104,11 +104,36 @@
                   x:Name="OperationsGrid"
                   AutoGenerateColumns="False"
                   ItemsSource="{Binding}"
-                  Background="#1E1E1E"
-                  Foreground="White"
-                  GridLinesVisibility="Vertical"
+                  Background="#202020"
+                  Foreground="#EEEEEE"
+                  RowBackground="#202020"
+                  AlternatingRowBackground="#2A2A2A"
+                  AlternationCount="2"
+                  BorderBrush="#444444"
+                  GridLinesVisibility="All"
+                  HorizontalGridLinesBrush="#444444"
+                  VerticalGridLinesBrush="#444444"
                   HeadersVisibility="Column"
                   CanUserAddRows="False">
+            <DataGrid.Resources>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Foreground" Value="#EEEEEE" />
+                    <Setter Property="Background" Value="{x:Null}" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                </Style>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Foreground" Value="#EEEEEE" />
+                    <Setter Property="Background" Value="{x:Null}" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                    <Setter Property="BorderThickness" Value="0.5" />
+                </Style>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Foreground" Value="White" />
+                    <Setter Property="Background" Value="#303030" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                </Style>
+            </DataGrid.Resources>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Дата" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="120" />
                 <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="80" />
