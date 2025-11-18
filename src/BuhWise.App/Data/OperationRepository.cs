@@ -156,6 +156,7 @@ namespace BuhWise.Data
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
+
                 command.Parameters.AddWithValue("$currency", currency.ToString());
                 command.Parameters.AddWithValue("$rate", rateToUsd);
                 command.ExecuteNonQuery();

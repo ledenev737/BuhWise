@@ -17,6 +17,7 @@ namespace BuhWise
             InitializeComponent();
             var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
             _repository = new OperationRepository(new DatabaseService(dbPath));
+
             LoadOperations();
             RefreshBalances();
         }
@@ -70,6 +71,7 @@ namespace BuhWise
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private static Currency ParseCurrency(ComboBox combo)
         {
