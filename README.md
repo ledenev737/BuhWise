@@ -1,2 +1,2 @@
 # BuhWise
-accounting mu finance
+accounting my finance
