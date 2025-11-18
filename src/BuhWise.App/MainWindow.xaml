@@ -154,11 +154,12 @@
                 </DataGrid.Columns>
             </DataGrid>
 
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 8 0 0" Spacing="8">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 8 0 0">
                 <Button x:Name="HistoryButton"
                         Content="История изменений"
                         Click="OpenHistory_Click"
-                        Padding="12,6" />
+                        Padding="12,6"
+                        Margin="0 0 8 0" />
                 <Button x:Name="DeleteOperationButton"
                         Content="Удалить выбранную операцию"
                         Click="DeleteOperation_Click"
