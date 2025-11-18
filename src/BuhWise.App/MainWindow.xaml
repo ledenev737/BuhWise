@@ -10,6 +10,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+
         <UniformGrid Columns="3" Margin="0 0 0 16">
             <Border Background="#2D2D30" Padding="12" CornerRadius="6" Margin="4">
                 <StackPanel>
@@ -30,6 +31,7 @@
                 </StackPanel>
             </Border>
         </UniformGrid>
+
 
         <Border Grid.Row="1" Background="#2D2D30" Padding="12" CornerRadius="6" Margin="0 0 0 16">
             <Grid>
@@ -96,6 +98,7 @@
                 </StackPanel>
             </Grid>
         </Border>
+
 
         <DataGrid Grid.Row="2"
                   x:Name="OperationsGrid"
