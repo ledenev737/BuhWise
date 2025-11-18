@@ -10,7 +10,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-
+        <!-- Balance cards -->
         <UniformGrid Columns="3" Margin="0 0 0 16">
             <Border Background="#2D2D30" Padding="12" CornerRadius="6" Margin="4">
                 <StackPanel>
@@ -32,7 +32,7 @@
             </Border>
         </UniformGrid>
 
-
+        <!-- Operation entry form -->
         <Border Grid.Row="1" Background="#2D2D30" Padding="12" CornerRadius="6" Margin="0 0 0 16">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -48,7 +48,7 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="0">
                     <TextBlock Text="Тип операции" Margin="0 0 0 4" />
-
+                    <ComboBox x:Name="OperationTypeBox" SelectedIndex="0" Height="28" SelectionChanged="OperationTypeBox_SelectionChanged">
                         <ComboBoxItem Content="Пополнение" Tag="Income" />
                         <ComboBoxItem Content="Расход" Tag="Expense" />
                         <ComboBoxItem Content="Обмен" Tag="Exchange" />
@@ -85,7 +85,7 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="2" Grid.Row="1">
                     <TextBlock Text="Комиссия (опционально)" Margin="0 0 0 4" />
-                    <TextBox x:Name="CommissionBox" Height="28" />
+                    <TextBox x:Name="FeeBox" Height="28" />
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="2">
@@ -93,13 +93,13 @@
                     <DatePicker x:Name="DateBox" SelectedDate="{x:Static sys:DateTime.Today}" Height="28" />
                 </StackPanel>
 
-
+                <StackPanel Orientation="Horizontal" Margin="4" Grid.Column="1" Grid.Row="2" Grid.ColumnSpan="2" VerticalAlignment="Bottom">
                     <Button Content="Добавить операцию" Click="AddOperation_Click" Height="32" Width="180" />
                 </StackPanel>
             </Grid>
         </Border>
 
-
+        <!-- Operations history -->
         <DataGrid Grid.Row="2"
                   x:Name="OperationsGrid"
                   AutoGenerateColumns="False"

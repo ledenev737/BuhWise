@@ -18,7 +18,7 @@ namespace BuhWise
             var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
             _repository = new OperationRepository(new DatabaseService(dbPath));
 
-
+            UpdateFieldStates();
             LoadOperations();
             RefreshBalances();
         }
@@ -48,7 +48,13 @@ namespace BuhWise
             {
                 var type = ParseOperationType(OperationTypeBox);
                 var sourceCurrency = ParseCurrency(SourceCurrencyBox);
-
+                var isExchange = type == OperationType.Exchange;
+                var targetCurrency = isExchange ? ParseCurrency(TargetCurrencyBox) : sourceCurrency;
+                var amount = ParseDouble(AmountBox.Text, "сумма");
+                var rate = isExchange ? ParseDouble(RateBox.Text, "курс") : GetCachedRateOrDefault(sourceCurrency);
+                var commission = isExchange && !string.IsNullOrWhiteSpace(FeeBox.Text)
+                    ? ParseDouble(FeeBox.Text, "комиссия")
+                    : (double?)null;
                 var date = DateBox.SelectedDate ?? DateTime.Today;
 
                 var draft = new OperationDraft
@@ -73,7 +79,16 @@ namespace BuhWise
             }
         }
 
+        private double GetCachedRateOrDefault(Currency sourceCurrency)
+        {
+            if (sourceCurrency == Currency.USD)
+            {
+                return 1d;
+            }
 
+            var cached = _repository.GetUsdRates();
+            return cached.TryGetValue(sourceCurrency, out var rate) ? rate : 0d;
+        }
 
         private static Currency ParseCurrency(ComboBox combo)
         {
@@ -110,9 +125,33 @@ namespace BuhWise
         {
             AmountBox.Text = string.Empty;
             RateBox.Text = string.Empty;
-            CommissionBox.Text = string.Empty;
+            FeeBox.Text = string.Empty;
             DateBox.SelectedDate = DateTime.Today;
+            UpdateFieldStates();
+        }
 
+        private void OperationTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateFieldStates();
+        }
+
+        private void UpdateFieldStates()
+        {
+            var isExchange = GetSelectedOperationType() == OperationType.Exchange;
+
+            TargetCurrencyBox.IsEnabled = isExchange;
+            RateBox.IsEnabled = isExchange;
+            FeeBox.IsEnabled = isExchange;
+        }
+
+        private OperationType GetSelectedOperationType()
+        {
+            if (OperationTypeBox.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out OperationType parsed))
+            {
+                return parsed;
+            }
+
+            return OperationType.Income;
         }
     }
 }
