@@ -100,51 +100,71 @@
         </Border>
 
         <!-- Operations history -->
-        <DataGrid Grid.Row="2"
-                  x:Name="OperationsGrid"
-                  AutoGenerateColumns="False"
-                  ItemsSource="{Binding}"
-                  Background="#202020"
-                  Foreground="#EEEEEE"
-                  RowBackground="#202020"
-                  AlternatingRowBackground="#2A2A2A"
-                  AlternationCount="2"
-                  BorderBrush="#444444"
-                  GridLinesVisibility="All"
-                  HorizontalGridLinesBrush="#444444"
-                  VerticalGridLinesBrush="#444444"
-                  HeadersVisibility="Column"
-                  CanUserAddRows="False">
-            <DataGrid.Resources>
-                <Style TargetType="DataGridRow">
-                    <Setter Property="Foreground" Value="#EEEEEE" />
-                    <Setter Property="Background" Value="{x:Null}" />
-                    <Setter Property="BorderBrush" Value="#444444" />
-                </Style>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Foreground" Value="#EEEEEE" />
-                    <Setter Property="Background" Value="{x:Null}" />
-                    <Setter Property="BorderBrush" Value="#444444" />
-                    <Setter Property="BorderThickness" Value="0.5" />
-                </Style>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Foreground" Value="White" />
-                    <Setter Property="Background" Value="#303030" />
-                    <Setter Property="BorderBrush" Value="#444444" />
-                    <Setter Property="BorderThickness" Value="0,0,0,1" />
-                </Style>
-            </DataGrid.Resources>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Дата" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="120" />
-                <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="80" />
-                <DataGridTextColumn Header="Из" Binding="{Binding SourceCurrency}" Width="60" />
-                <DataGridTextColumn Header="Сумма из" Binding="{Binding SourceAmount}" Width="100" />
-                <DataGridTextColumn Header="В" Binding="{Binding TargetCurrency}" Width="60" />
-                <DataGridTextColumn Header="Сумма в" Binding="{Binding TargetAmount}" Width="100" />
-                <DataGridTextColumn Header="Курс" Binding="{Binding Rate}" Width="80" />
-                <DataGridTextColumn Header="Комиссия" Binding="{Binding Commission}" Width="90" />
-                <DataGridTextColumn Header="USD экв." Binding="{Binding UsdEquivalent}" Width="100" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <DataGrid Grid.Row="0"
+                      x:Name="OperationsGrid"
+                      AutoGenerateColumns="False"
+                      ItemsSource="{Binding}"
+                      Background="#202020"
+                      Foreground="#EEEEEE"
+                      RowBackground="#202020"
+                      AlternatingRowBackground="#2A2A2A"
+                      AlternationCount="2"
+                      BorderBrush="#444444"
+                      GridLinesVisibility="All"
+                      HorizontalGridLinesBrush="#444444"
+                      VerticalGridLinesBrush="#444444"
+                      HeadersVisibility="Column"
+                      CanUserAddRows="False"
+                      SelectionChanged="OperationsGrid_SelectionChanged">
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Foreground" Value="#EEEEEE" />
+                        <Setter Property="Background" Value="{x:Null}" />
+                        <Setter Property="BorderBrush" Value="#444444" />
+                    </Style>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Foreground" Value="#EEEEEE" />
+                        <Setter Property="Background" Value="{x:Null}" />
+                        <Setter Property="BorderBrush" Value="#444444" />
+                        <Setter Property="BorderThickness" Value="0.5" />
+                    </Style>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Foreground" Value="White" />
+                        <Setter Property="Background" Value="#303030" />
+                        <Setter Property="BorderBrush" Value="#444444" />
+                        <Setter Property="BorderThickness" Value="0,0,0,1" />
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Дата" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="120" />
+                    <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="80" />
+                    <DataGridTextColumn Header="Из" Binding="{Binding SourceCurrency}" Width="60" />
+                    <DataGridTextColumn Header="Сумма из" Binding="{Binding SourceAmount}" Width="100" />
+                    <DataGridTextColumn Header="В" Binding="{Binding TargetCurrency}" Width="60" />
+                    <DataGridTextColumn Header="Сумма в" Binding="{Binding TargetAmount}" Width="100" />
+                    <DataGridTextColumn Header="Курс" Binding="{Binding Rate}" Width="80" />
+                    <DataGridTextColumn Header="Комиссия" Binding="{Binding Commission}" Width="90" />
+                    <DataGridTextColumn Header="USD экв." Binding="{Binding UsdEquivalent}" Width="100" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 8 0 0" Spacing="8">
+                <Button x:Name="HistoryButton"
+                        Content="История изменений"
+                        Click="OpenHistory_Click"
+                        Padding="12,6" />
+                <Button x:Name="DeleteOperationButton"
+                        Content="Удалить выбранную операцию"
+                        Click="DeleteOperation_Click"
+                        IsEnabled="False"
+                        Padding="12,6" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

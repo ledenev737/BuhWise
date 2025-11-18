@@ -61,6 +61,19 @@ namespace BuhWise.Data
                 command.ExecuteNonQuery();
             }
 
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"CREATE TABLE IF NOT EXISTS OperationChanges (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    OperationId INTEGER NULL,
+                    Action TEXT NOT NULL,
+                    Timestamp TEXT NOT NULL,
+                    Details TEXT NOT NULL,
+                    Reason TEXT NULL
+                );";
+                command.ExecuteNonQuery();
+            }
+
             EnsureCurrencyRows(connection, "USD");
             EnsureCurrencyRows(connection, "EUR");
             EnsureCurrencyRows(connection, "RUB");

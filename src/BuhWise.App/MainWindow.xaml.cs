@@ -21,6 +21,7 @@ namespace BuhWise
             UpdateFieldStates();
             LoadOperations();
             RefreshBalances();
+            UpdateDeleteButtonState();
         }
 
         private void LoadOperations()
@@ -32,6 +33,7 @@ namespace BuhWise
             }
 
             OperationsGrid.ItemsSource = _operations;
+            OperationsGrid.SelectedItem = null;
         }
 
         private void RefreshBalances()
@@ -135,6 +137,56 @@ namespace BuhWise
             UpdateFieldStates();
         }
 
+        private void OperationsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateDeleteButtonState();
+        }
+
+        private void DeleteOperation_Click(object sender, RoutedEventArgs e)
+        {
+            if (OperationsGrid.SelectedItem is not Operation selected)
+            {
+                return;
+            }
+
+            var result = MessageBox.Show(
+                "Вы уверены, что хотите удалить выбранную операцию?",
+                "Подтверждение",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var reasonDialog = new InputDialog { Owner = this };
+            if (reasonDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            var reason = string.IsNullOrWhiteSpace(reasonDialog.Result) ? null : reasonDialog.Result;
+
+            try
+            {
+                _repository.DeleteOperation(selected.Id, reason);
+                LoadOperations();
+                RefreshBalances();
+                UpdateDeleteButtonState();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenHistory_Click(object sender, RoutedEventArgs e)
+        {
+            var history = new HistoryWindow(_repository) { Owner = this };
+            history.ShowDialog();
+        }
+
         private void UpdateFieldStates()
         {
             var isExchange = GetSelectedOperationType() == OperationType.Exchange;
@@ -142,6 +194,14 @@ namespace BuhWise
             TargetCurrencyBox.IsEnabled = isExchange;
             RateBox.IsEnabled = isExchange;
             FeeBox.IsEnabled = isExchange;
+        }
+
+        private void UpdateDeleteButtonState()
+        {
+            if (DeleteOperationButton != null)
+            {
+                DeleteOperationButton.IsEnabled = OperationsGrid?.SelectedItem is Operation;
+            }
         }
 
         private OperationType GetSelectedOperationType()
