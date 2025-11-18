@@ -17,7 +17,6 @@ namespace BuhWise
             InitializeComponent();
             var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
             _repository = new OperationRepository(new DatabaseService(dbPath));
-
             LoadOperations();
             RefreshBalances();
         }
@@ -47,10 +46,7 @@ namespace BuhWise
             {
                 var type = ParseOperationType(OperationTypeBox);
                 var sourceCurrency = ParseCurrency(SourceCurrencyBox);
-                var targetCurrency = type == OperationType.Exchange ? ParseCurrency(TargetCurrencyBox) : sourceCurrency;
-                var amount = ParseDouble(AmountBox.Text, "сумма");
-                var rate = ParseDouble(RateBox.Text, "курс");
-                var commission = string.IsNullOrWhiteSpace(CommissionBox.Text) ? (double?)null : ParseDouble(CommissionBox.Text, "комиссия");
+
                 var date = DateBox.SelectedDate ?? DateTime.Today;
 
                 var draft = new OperationDraft
@@ -112,6 +108,7 @@ namespace BuhWise
             RateBox.Text = string.Empty;
             CommissionBox.Text = string.Empty;
             DateBox.SelectedDate = DateTime.Today;
+
         }
     }
 }

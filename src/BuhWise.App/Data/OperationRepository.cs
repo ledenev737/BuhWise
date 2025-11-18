@@ -156,8 +156,6 @@ namespace BuhWise.Data
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
-                command.CommandText = @"INSERT INTO Rates (Currency, RateToUsd) VALUES ($currency, $rate)
-                                        ON CONFLICT(Currency) DO UPDATE SET RateToUsd = excluded.Rate";
                 command.Parameters.AddWithValue("$currency", currency.ToString());
                 command.Parameters.AddWithValue("$rate", rateToUsd);
                 command.ExecuteNonQuery();

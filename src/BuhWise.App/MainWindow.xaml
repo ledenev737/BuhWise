@@ -46,7 +46,6 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="0">
                     <TextBlock Text="Тип операции" Margin="0 0 0 4" />
-                    <ComboBox x:Name="OperationTypeBox" SelectedIndex="0" Height="28">
                         <ComboBoxItem Content="Пополнение" Tag="Income" />
                         <ComboBoxItem Content="Расход" Tag="Expense" />
                         <ComboBoxItem Content="Обмен" Tag="Exchange" />
