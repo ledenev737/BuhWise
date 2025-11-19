@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using BuhWise.Models;
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
 
 namespace BuhWise.Data
 {
@@ -62,7 +63,7 @@ namespace BuhWise.Data
             connection.Open();
 
             using var command = connection.CreateCommand();
-            command.CommandText = @"SELECT Id, Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent FROM Operations ORDER BY Date DESC, Id DESC";
+            command.CommandText = @"SELECT Id, Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent, ExpenseCategory, ExpenseComment FROM Operations ORDER BY Date DESC, Id DESC";
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -78,7 +79,9 @@ namespace BuhWise.Data
                     TargetAmount = reader.GetDouble(6),
                     Rate = reader.GetDouble(7),
                     Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
-                    UsdEquivalent = reader.GetDouble(9)
+                    UsdEquivalent = reader.GetDouble(9),
+                    ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
+                    ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
                 });
             }
 
@@ -93,6 +96,7 @@ namespace BuhWise.Data
             connection.Open();
             using var transaction = connection.BeginTransaction();
 
+            EnsureSufficientFunds(operation, connection, transaction);
             InsertOperation(operation, connection, transaction);
             UpdateBalances(operation, connection, transaction);
             UpdateRates(operation, connection, transaction);
@@ -164,8 +168,8 @@ namespace BuhWise.Data
         {
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = @"INSERT INTO Operations (Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent)
-                                    VALUES ($date, $type, $sourceCurrency, $sourceAmount, $targetCurrency, $targetAmount, $rate, $commission, $usdEquivalent);
+            command.CommandText = @"INSERT INTO Operations (Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent, ExpenseCategory, ExpenseComment)
+                                    VALUES ($date, $type, $sourceCurrency, $sourceAmount, $targetCurrency, $targetAmount, $rate, $commission, $usdEquivalent, $expenseCategory, $expenseComment);
                                     SELECT last_insert_rowid();";
 
             command.Parameters.AddWithValue("$date", operation.Date.ToString("O"));
@@ -177,6 +181,8 @@ namespace BuhWise.Data
             command.Parameters.AddWithValue("$rate", operation.Rate);
             command.Parameters.AddWithValue("$commission", (object?)operation.Commission ?? DBNull.Value);
             command.Parameters.AddWithValue("$usdEquivalent", operation.UsdEquivalent);
+            command.Parameters.AddWithValue("$expenseCategory", (object?)operation.ExpenseCategory ?? DBNull.Value);
+            command.Parameters.AddWithValue("$expenseComment", (object?)operation.ExpenseComment ?? DBNull.Value);
 
             var id = (long)(command.ExecuteScalar() ?? 0L);
             operation.Id = id;
@@ -283,18 +289,31 @@ namespace BuhWise.Data
                 TargetAmount = targetAmount,
                 Rate = draft.Rate,
                 Commission = draft.Commission,
-                UsdEquivalent = usdEquivalent
+                UsdEquivalent = usdEquivalent,
+                ExpenseCategory = draft.Type == OperationType.Expense ? draft.ExpenseCategory : null,
+                ExpenseComment = draft.Type == OperationType.Expense ? draft.ExpenseComment : null
             };
         }
 
         private static string BuildDetails(Operation operation)
         {
-            var culture = CultureInfo.InvariantCulture;
-            var commission = operation.Commission.HasValue
-                ? operation.Commission.Value.ToString(culture)
-                : "null";
+            var payload = new
+            {
+                operation.Id,
+                Date = operation.Date.ToString("o", CultureInfo.InvariantCulture),
+                Type = operation.Type.ToString(),
+                SourceCurrency = operation.SourceCurrency.ToString(),
+                operation.SourceAmount,
+                TargetCurrency = operation.TargetCurrency.ToString(),
+                operation.TargetAmount,
+                operation.Rate,
+                operation.Commission,
+                operation.UsdEquivalent,
+                operation.ExpenseCategory,
+                operation.ExpenseComment
+            };
 
-            return $"{{\"Id\":{operation.Id},\"Date\":\"{operation.Date:o}\",\"Type\":\"{operation.Type}\",\"SourceCurrency\":\"{operation.SourceCurrency}\",\"SourceAmount\":{operation.SourceAmount.ToString(culture)},\"TargetCurrency\":\"{operation.TargetCurrency}\",\"TargetAmount\":{operation.TargetAmount.ToString(culture)},\"Rate\":{operation.Rate.ToString(culture)},\"Commission\":{commission},\"UsdEquivalent\":{operation.UsdEquivalent.ToString(culture)} }}";
+            return JsonSerializer.Serialize(payload);
         }
 
         private double CalculateExchangeAmount(OperationDraft draft)
@@ -331,7 +350,7 @@ namespace BuhWise.Data
         {
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = @"SELECT Id, Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent FROM Operations WHERE Id = $id";
+            command.CommandText = @"SELECT Id, Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent, ExpenseCategory, ExpenseComment FROM Operations WHERE Id = $id";
             command.Parameters.AddWithValue("$id", id);
 
             using var reader = command.ExecuteReader();
@@ -351,8 +370,42 @@ namespace BuhWise.Data
                 TargetAmount = reader.GetDouble(6),
                 Rate = reader.GetDouble(7),
                 Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
-                UsdEquivalent = reader.GetDouble(9)
+                UsdEquivalent = reader.GetDouble(9),
+                ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
+                ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
             };
+        }
+
+        private static double GetBalance(SqliteConnection connection, SqliteTransaction transaction, Currency currency)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT Amount FROM Balances WHERE Currency = $currency";
+            command.Parameters.AddWithValue("$currency", currency.ToString());
+            var result = command.ExecuteScalar();
+            return result switch
+            {
+                double d => d,
+                null => 0d,
+                _ => Convert.ToDouble(result, CultureInfo.InvariantCulture)
+            };
+        }
+
+        private static void EnsureSufficientFunds(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
+        {
+            if (operation.Type == OperationType.Income)
+            {
+                return;
+            }
+
+            if (operation.Type is OperationType.Expense or OperationType.Exchange)
+            {
+                var balance = GetBalance(connection, transaction, operation.SourceCurrency);
+                if (balance - operation.SourceAmount < -0.0001)
+                {
+                    throw new InvalidOperationException($"Недостаточно средств в {operation.SourceCurrency} для операции.");
+                }
+            }
         }
 
         private static void TryLogOperationChange(Operation operation, string action, string? reason, SqliteConnection connection, SqliteTransaction transaction)

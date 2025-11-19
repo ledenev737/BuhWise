@@ -44,6 +44,8 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="0">
@@ -75,7 +77,20 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="1">
                     <TextBlock Text="Сумма" Margin="0 0 0 4" />
-                    <TextBox x:Name="AmountBox" Height="28" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="AmountBox" Height="28" Grid.Column="0" />
+                        <Button x:Name="MaxAmountButton"
+                                Grid.Column="1"
+                                Content="MAX"
+                                Margin="6 0 0 0"
+                                Padding="10,0"
+                                Visibility="Collapsed"
+                                Click="MaxAmountButton_Click" />
+                    </Grid>
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="1">
@@ -93,7 +108,28 @@
                     <DatePicker x:Name="DateBox" SelectedDate="{x:Static sys:DateTime.Today}" Height="28" />
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="4" Grid.Column="1" Grid.Row="2" Grid.ColumnSpan="2" VerticalAlignment="Bottom">
+                <StackPanel x:Name="ExpenseCategoryPanel" Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="2" Grid.ColumnSpan="2" Visibility="Collapsed">
+                    <TextBlock Text="Категория расхода" Margin="0 0 0 4" />
+                    <ComboBox x:Name="ExpenseCategoryBox" Height="28" SelectedIndex="-1">
+                        <ComboBoxItem Content="Еда и продукты" />
+                        <ComboBoxItem Content="Транспорт" />
+                        <ComboBoxItem Content="Жильё / аренда" />
+                        <ComboBoxItem Content="Коммунальные услуги" />
+                        <ComboBoxItem Content="Здоровье и лекарства" />
+                        <ComboBoxItem Content="Образование и саморазвитие" />
+                        <ComboBoxItem Content="Развлечения и досуг" />
+                        <ComboBoxItem Content="Одежда и обувь" />
+                        <ComboBoxItem Content="Путешествия" />
+                        <ComboBoxItem Content="Другое" />
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel x:Name="ExpenseCommentPanel" Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="3" Grid.ColumnSpan="3" Visibility="Collapsed">
+                    <TextBlock Text="Комментарий" Margin="0 0 0 4" />
+                    <TextBox x:Name="ExpenseCommentBox" Height="28" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="4" Grid.Column="0" Grid.Row="4" Grid.ColumnSpan="3" VerticalAlignment="Bottom" HorizontalAlignment="Left">
                     <Button Content="Добавить операцию" Click="AddOperation_Click" Height="32" Width="180" />
                 </StackPanel>
             </Grid>
@@ -142,15 +178,17 @@
                     </Style>
                 </DataGrid.Resources>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Дата" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="120" />
-                    <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="80" />
-                    <DataGridTextColumn Header="Из" Binding="{Binding SourceCurrency}" Width="60" />
-                    <DataGridTextColumn Header="Сумма из" Binding="{Binding SourceAmount}" Width="100" />
-                    <DataGridTextColumn Header="В" Binding="{Binding TargetCurrency}" Width="60" />
-                    <DataGridTextColumn Header="Сумма в" Binding="{Binding TargetAmount}" Width="100" />
-                    <DataGridTextColumn Header="Курс" Binding="{Binding Rate}" Width="80" />
-                    <DataGridTextColumn Header="Комиссия" Binding="{Binding Commission}" Width="90" />
-                    <DataGridTextColumn Header="USD экв." Binding="{Binding UsdEquivalent}" Width="100" />
+                    <DataGridTextColumn Header="Дата" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="130" />
+                    <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="120" />
+                    <DataGridTextColumn Header="Из" Binding="{Binding SourceCurrency}" Width="Auto" />
+                    <DataGridTextColumn Header="Сумма из" Binding="{Binding SourceAmount, StringFormat=F2}" Width="*" />
+                    <DataGridTextColumn Header="В" Binding="{Binding TargetCurrency}" Width="Auto" />
+                    <DataGridTextColumn Header="Сумма в" Binding="{Binding TargetAmount, StringFormat=F2}" Width="*" />
+                    <DataGridTextColumn Header="Курс" Binding="{Binding Rate, StringFormat=F4}" Width="Auto" />
+                    <DataGridTextColumn Header="Комиссия" Binding="{Binding Commission, StringFormat=F2}" Width="Auto" />
+                    <DataGridTextColumn Header="USD экв." Binding="{Binding UsdEquivalent, StringFormat=F2}" Width="*" />
+                    <DataGridTextColumn Header="Категория" Binding="{Binding ExpenseCategory}" Width="*" />
+                    <DataGridTextColumn Header="Комментарий" Binding="{Binding ExpenseComment}" Width="2*" />
                 </DataGrid.Columns>
             </DataGrid>
 

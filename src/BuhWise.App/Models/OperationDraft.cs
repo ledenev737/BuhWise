@@ -11,5 +11,7 @@ namespace BuhWise.Models
         public double SourceAmount { get; set; }
         public double Rate { get; set; }
         public double? Commission { get; set; }
+        public string? ExpenseCategory { get; set; }
+        public string? ExpenseComment { get; set; }
     }
 }

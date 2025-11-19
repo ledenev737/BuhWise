@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using BuhWise.Data;
@@ -11,6 +13,7 @@ namespace BuhWise
     {
         private readonly OperationRepository _repository;
         private readonly ObservableCollection<Operation> _operations = new();
+        private readonly Dictionary<Currency, double> _balanceCache = new();
 
         public MainWindow()
         {
@@ -39,6 +42,12 @@ namespace BuhWise
         private void RefreshBalances()
         {
             var balances = _repository.GetBalances();
+            _balanceCache.Clear();
+            foreach (var entry in balances)
+            {
+                _balanceCache[entry.Key] = entry.Value;
+            }
+
             UsdBalance.Text = balances.TryGetValue(Currency.USD, out var usd) ? usd.ToString("F2") : "0";
             EurBalance.Text = balances.TryGetValue(Currency.EUR, out var eur) ? eur.ToString("F2") : "0";
             RubBalance.Text = balances.TryGetValue(Currency.RUB, out var rub) ? rub.ToString("F2") : "0";
@@ -51,6 +60,7 @@ namespace BuhWise
                 var type = ParseOperationType(OperationTypeBox);
                 var sourceCurrency = ParseCurrency(SourceCurrencyBox);
                 var isExchange = type == OperationType.Exchange;
+                var isExpense = type == OperationType.Expense;
                 var targetCurrency = isExchange ? ParseCurrency(TargetCurrencyBox) : sourceCurrency;
                 var amount = ParseDouble(AmountBox.Text, "сумма");
                 var rate = isExchange ? ParseDouble(RateBox.Text, "курс") : GetCachedRateOrDefault(sourceCurrency);
@@ -58,6 +68,41 @@ namespace BuhWise
                     ? ParseDouble(FeeBox.Text, "комиссия")
                     : (double?)null;
                 var date = DateBox.SelectedDate ?? DateTime.Today;
+                string? expenseCategory = null;
+                string? expenseComment = null;
+
+                if (isExpense)
+                {
+                    expenseCategory = GetSelectedExpenseCategory();
+                    if (string.IsNullOrWhiteSpace(expenseCategory))
+                    {
+                        throw new InvalidOperationException("Выберите категорию расхода");
+                    }
+
+                    expenseComment = string.IsNullOrWhiteSpace(ExpenseCommentBox.Text)
+                        ? null
+                        : ExpenseCommentBox.Text.Trim();
+                }
+
+                if (isExchange)
+                {
+                    var available = GetAvailableBalance(sourceCurrency);
+                    if (available <= 0)
+                    {
+                        throw new InvalidOperationException("Недостаточно средств для обмена в выбранной валюте");
+                    }
+
+                    if (amount > available)
+                    {
+                        amount = Math.Round(available, 2);
+                        AmountBox.Text = amount.ToString("F2", CultureInfo.InvariantCulture);
+                        MessageBox.Show(
+                            "Сумма обмена была уменьшена до доступного остатка",
+                            "Ограничение",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                }
 
                 var draft = new OperationDraft
                 {
@@ -67,7 +112,9 @@ namespace BuhWise
                     TargetCurrency = targetCurrency,
                     SourceAmount = amount,
                     Rate = rate,
-                    Commission = commission
+                    Commission = commission,
+                    ExpenseCategory = expenseCategory,
+                    ExpenseComment = expenseComment
                 };
 
                 var operation = _repository.AddOperation(draft);
@@ -129,6 +176,8 @@ namespace BuhWise
             RateBox.Text = string.Empty;
             FeeBox.Text = string.Empty;
             DateBox.SelectedDate = DateTime.Today;
+            ExpenseCategoryBox.SelectedIndex = -1;
+            ExpenseCommentBox.Text = string.Empty;
             UpdateFieldStates();
         }
 
@@ -189,11 +238,17 @@ namespace BuhWise
 
         private void UpdateFieldStates()
         {
-            var isExchange = GetSelectedOperationType() == OperationType.Exchange;
+            var type = GetSelectedOperationType();
+            var isExchange = type == OperationType.Exchange;
+            var isExpense = type == OperationType.Expense;
 
             TargetCurrencyBox.IsEnabled = isExchange;
             RateBox.IsEnabled = isExchange;
             FeeBox.IsEnabled = isExchange;
+            MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+
+            ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void UpdateDeleteButtonState()
@@ -212,6 +267,46 @@ namespace BuhWise
             }
 
             return OperationType.Income;
+        }
+
+        private string? GetSelectedExpenseCategory()
+        {
+            if (ExpenseCategoryBox.SelectedItem is ComboBoxItem item)
+            {
+                return item.Content?.ToString();
+            }
+
+            return null;
+        }
+
+        private double GetAvailableBalance(Currency currency)
+        {
+            return _balanceCache.TryGetValue(currency, out var value) ? value : 0d;
+        }
+
+        private void MaxAmountButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (GetSelectedOperationType() != OperationType.Exchange)
+            {
+                return;
+            }
+
+            try
+            {
+                var sourceCurrency = ParseCurrency(SourceCurrencyBox);
+                var available = GetAvailableBalance(sourceCurrency);
+                if (available <= 0)
+                {
+                    MessageBox.Show("Недостаточно средств в выбранной валюте", "Нет средств", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                AmountBox.Text = available.ToString("F2", CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }

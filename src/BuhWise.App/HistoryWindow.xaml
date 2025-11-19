@@ -10,6 +10,7 @@
     <Grid Margin="12">
         <DataGrid x:Name="HistoryGrid"
                   AutoGenerateColumns="False"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   Background="#202020"
                   Foreground="#EEEEEE"
                   RowBackground="#202020"

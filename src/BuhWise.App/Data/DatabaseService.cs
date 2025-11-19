@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Microsoft.Data.Sqlite;
 
@@ -38,10 +39,15 @@ namespace BuhWise.Data
                     TargetAmount REAL NOT NULL,
                     Rate REAL NOT NULL,
                     Commission REAL NULL,
-                    UsdEquivalent REAL NOT NULL
+                    UsdEquivalent REAL NOT NULL,
+                    ExpenseCategory TEXT NULL,
+                    ExpenseComment TEXT NULL
                 );";
                 command.ExecuteNonQuery();
             }
+
+            EnsureColumnExists(connection, "Operations", "ExpenseCategory", "TEXT NULL");
+            EnsureColumnExists(connection, "Operations", "ExpenseComment", "TEXT NULL");
 
             using (var command = connection.CreateCommand())
             {
@@ -95,6 +101,26 @@ namespace BuhWise.Data
                 insertRate.Parameters.AddWithValue("$rate", currency == "USD" ? 1 : 0);
                 insertRate.ExecuteNonQuery();
             }
+        }
+
+        private static void EnsureColumnExists(SqliteConnection connection, string table, string column, string definition)
+        {
+            using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = $"PRAGMA table_info({table})";
+                using var reader = pragma.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+                }
+            }
+
+            using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+            alter.ExecuteNonQuery();
         }
     }
 }
