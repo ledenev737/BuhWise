@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Controls;
 using BuhWise.Data;
 using BuhWise.Models;
+using BuhWise.Services;
+using Microsoft.Win32;
 
 namespace BuhWise
 {
@@ -14,6 +16,7 @@ namespace BuhWise
         private readonly OperationRepository _repository;
         private readonly ObservableCollection<Operation> _operations = new();
         private readonly Dictionary<Currency, double> _balanceCache = new();
+        private readonly SpreadsheetService _spreadsheetService = new();
 
         public MainWindow()
         {
@@ -334,6 +337,71 @@ namespace BuhWise
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportToXlsx_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Excel (*.xlsx)|*.xlsx",
+                DefaultExt = ".xlsx",
+                FileName = $"transactions_{DateTime.Today:yyyy-MM-dd}.xlsx"
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                var operations = _repository.GetOperations();
+                _spreadsheetService.ExportOperations(dialog.FileName, operations);
+                MessageBox.Show("Экспорт завершён", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка экспорта", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ImportFromXlsx_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Excel (*.xlsx)|*.xlsx",
+                DefaultExt = ".xlsx"
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                "Текущие операции будут заменены данными из файла. Продолжить?",
+                "Подтверждение",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                var imported = _spreadsheetService.ImportOperations(dialog.FileName);
+                _repository.ReplaceAllOperations(imported);
+                LoadOperations();
+                RefreshBalances();
+                UpdateDeleteButtonState();
+                MessageBox.Show("Импорт завершён", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

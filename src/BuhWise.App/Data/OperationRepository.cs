@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using BuhWise.Models;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
@@ -133,6 +134,31 @@ namespace BuhWise.Data
             transaction.Commit();
         }
 
+        public void ReplaceAllOperations(IEnumerable<Operation> operations)
+        {
+            var ordered = operations
+                .OrderBy(o => o.Date)
+                .ThenBy(o => o.Id)
+                .ToList();
+
+            using var connection = _database.GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            ClearOperations(connection, transaction);
+            ResetBalances(connection, transaction);
+            ResetRates(connection, transaction);
+
+            foreach (var operation in ordered)
+            {
+                InsertOperation(operation, connection, transaction);
+                UpdateBalances(operation, connection, transaction);
+                UpdateRates(operation, connection, transaction);
+            }
+
+            transaction.Commit();
+        }
+
         public IEnumerable<OperationChange> GetOperationChanges(long? operationId = null)
         {
             var changes = new List<OperationChange>();
@@ -186,6 +212,47 @@ namespace BuhWise.Data
 
             var id = (long)(command.ExecuteScalar() ?? 0L);
             operation.Id = id;
+        }
+
+        private static void ClearOperations(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            using var deleteOps = connection.CreateCommand();
+            deleteOps.Transaction = transaction;
+            deleteOps.CommandText = "DELETE FROM Operations";
+            deleteOps.ExecuteNonQuery();
+
+            using var deleteChanges = connection.CreateCommand();
+            deleteChanges.Transaction = transaction;
+            deleteChanges.CommandText = "DELETE FROM OperationChanges";
+            deleteChanges.ExecuteNonQuery();
+        }
+
+        private static void ResetBalances(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            using var reset = connection.CreateCommand();
+            reset.Transaction = transaction;
+            reset.CommandText = "UPDATE Balances SET Amount = 0";
+            reset.ExecuteNonQuery();
+        }
+
+        private static void ResetRates(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            using (var clear = connection.CreateCommand())
+            {
+                clear.Transaction = transaction;
+                clear.CommandText = "DELETE FROM Rates";
+                clear.ExecuteNonQuery();
+            }
+
+            foreach (var currency in Enum.GetValues<Currency>())
+            {
+                using var insert = connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = "INSERT INTO Rates (Currency, RateToUsd) VALUES ($currency, $rate)";
+                insert.Parameters.AddWithValue("$currency", currency.ToString());
+                insert.Parameters.AddWithValue("$rate", currency == Currency.USD ? 1 : 0);
+                insert.ExecuteNonQuery();
+            }
         }
 
         private static void UpdateBalances(Operation operation, SqliteConnection connection, SqliteTransaction transaction)

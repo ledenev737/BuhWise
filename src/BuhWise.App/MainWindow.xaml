@@ -193,6 +193,16 @@
             </DataGrid>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 8 0 0">
+                <Button x:Name="ExportButton"
+                        Content="Экспорт в XLSX"
+                        Click="ExportToXlsx_Click"
+                        Padding="12,6"
+                        Margin="0 0 8 0" />
+                <Button x:Name="ImportButton"
+                        Content="Импорт из XLSX"
+                        Click="ImportFromXlsx_Click"
+                        Padding="12,6"
+                        Margin="0 0 8 0" />
                 <Button x:Name="HistoryButton"
                         Content="История изменений"
                         Click="OpenHistory_Click"
