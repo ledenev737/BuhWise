@@ -14,6 +14,11 @@ namespace BuhWise
         {
             InitializeComponent();
             _repository = repository;
+            Loaded += HistoryWindow_Loaded;
+        }
+
+        private void HistoryWindow_Loaded(object sender, RoutedEventArgs e)
+        {
             HistoryGrid.ItemsSource = _changes;
             LoadHistory();
         }

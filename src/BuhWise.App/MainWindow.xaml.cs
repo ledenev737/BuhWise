@@ -18,12 +18,18 @@ namespace BuhWise
         public MainWindow()
         {
             InitializeComponent();
+
             var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
             _repository = new OperationRepository(new DatabaseService(dbPath));
 
-            UpdateFieldStates();
+            Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
             LoadOperations();
             RefreshBalances();
+            UpdateFieldStates();
             UpdateDeleteButtonState();
         }
 
@@ -242,13 +248,35 @@ namespace BuhWise
             var isExchange = type == OperationType.Exchange;
             var isExpense = type == OperationType.Expense;
 
-            TargetCurrencyBox.IsEnabled = isExchange;
-            RateBox.IsEnabled = isExchange;
-            FeeBox.IsEnabled = isExchange;
-            MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+            if (TargetCurrencyBox != null)
+            {
+                TargetCurrencyBox.IsEnabled = isExchange;
+            }
 
-            ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
-            ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            if (RateBox != null)
+            {
+                RateBox.IsEnabled = isExchange;
+            }
+
+            if (FeeBox != null)
+            {
+                FeeBox.IsEnabled = isExchange;
+            }
+
+            if (MaxAmountButton != null)
+            {
+                MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (ExpenseCategoryPanel != null)
+            {
+                ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (ExpenseCommentPanel != null)
+            {
+                ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         private void UpdateDeleteButtonState()
@@ -261,7 +289,7 @@ namespace BuhWise
 
         private OperationType GetSelectedOperationType()
         {
-            if (OperationTypeBox.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out OperationType parsed))
+            if (OperationTypeBox?.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out OperationType parsed))
             {
                 return parsed;
             }
