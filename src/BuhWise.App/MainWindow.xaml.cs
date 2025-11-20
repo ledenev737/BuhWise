@@ -17,6 +17,7 @@ namespace BuhWise
         private readonly ObservableCollection<Operation> _operations = new();
         private readonly Dictionary<Currency, double> _balanceCache = new();
         private readonly SpreadsheetService _spreadsheetService = new();
+        private readonly IFxRatePresentationService _ratePresentationService = new FxRatePresentationService();
         private string? _currentRatePairKey;
         private bool _rateEditedByUser;
         private bool _suppressRateTextChange;
@@ -81,7 +82,10 @@ namespace BuhWise
                 var isExpense = type == OperationType.Expense;
                 var targetCurrency = isExchange ? ParseCurrency(TargetCurrencyBox) : sourceCurrency;
                 var amount = ParseDouble(AmountBox.Text, "сумма");
-                var rate = isExchange ? ParseDouble(RateBox.Text, "курс") : GetCachedRateOrDefault(sourceCurrency);
+                var rateInput = isExchange ? ParseDouble(RateBox.Text, "курс") : GetCachedRateOrDefault(sourceCurrency);
+                var normalizedRate = isExchange
+                    ? _ratePresentationService.ToInternalRate(rateInput, sourceCurrency, targetCurrency)
+                    : rateInput;
                 var commission = isExchange && !string.IsNullOrWhiteSpace(FeeBox.Text)
                     ? ParseDouble(FeeBox.Text, "комиссия")
                     : (double?)null;
@@ -121,10 +125,6 @@ namespace BuhWise
                             MessageBoxImage.Information);
                     }
                 }
-
-                var normalizedRate = isExchange
-                    ? NormalizeExchangeRate(sourceCurrency, targetCurrency, rate)
-                    : rate;
 
                 var draft = new OperationDraft
                 {
@@ -274,7 +274,9 @@ namespace BuhWise
             var isExpense = type == OperationType.Expense;
             var hasSource = TryParseCurrency(SourceCurrencyBox, out var sourceCurrency);
             var hasTarget = TryParseCurrency(TargetCurrencyBox, out var targetCurrency);
-            var isRubToUsd = isExchange && hasSource && hasTarget && IsRubToUsdPair(sourceCurrency, targetCurrency);
+            var mode = isExchange && hasSource && hasTarget
+                ? _ratePresentationService.GetDisplayMode(sourceCurrency, targetCurrency)
+                : FxRateDisplayMode.Direct;
 
             if (TargetCurrencyBox != null)
             {
@@ -308,7 +310,17 @@ namespace BuhWise
 
             if (RateLabel != null)
             {
-                RateLabel.Text = isRubToUsd ? "Курс (USD/RUB)" : "Курс";
+                if (isExchange && hasSource && hasTarget)
+                {
+                    var label = mode == FxRateDisplayMode.Inverted
+                        ? $"Курс ({targetCurrency}/{sourceCurrency})"
+                        : "Курс";
+                    RateLabel.Text = label;
+                }
+                else
+                {
+                    RateLabel.Text = "Курс";
+                }
             }
 
             if (!isExchange)
@@ -363,6 +375,11 @@ namespace BuhWise
 
         private void MaybePrefillRateFromMemory()
         {
+            if (RateBox == null)
+            {
+                return;
+            }
+
             var type = GetSelectedOperationType();
             if (type != OperationType.Exchange)
             {
@@ -391,7 +408,7 @@ namespace BuhWise
             _suppressRateTextChange = true;
             if (lastRate.HasValue)
             {
-                var displayRate = ToDisplayRate(source, target, lastRate.Value);
+                var displayRate = _ratePresentationService.ToDisplayRate(lastRate.Value, source, target);
                 RateBox.Text = displayRate > 0
                     ? displayRate.ToString("F4", CultureInfo.InvariantCulture)
                     : string.Empty;
@@ -427,36 +444,6 @@ namespace BuhWise
             {
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private static bool IsRubToUsdPair(Currency source, Currency target)
-        {
-            return source == Currency.RUB && target == Currency.USD;
-        }
-
-        private static double NormalizeExchangeRate(Currency source, Currency target, double userRate)
-        {
-            if (IsRubToUsdPair(source, target))
-            {
-                if (userRate <= 0)
-                {
-                    throw new InvalidOperationException("Курс должен быть больше нуля");
-                }
-
-                return 1d / userRate;
-            }
-
-            return userRate;
-        }
-
-        private static double ToDisplayRate(Currency source, Currency target, double normalizedRate)
-        {
-            if (IsRubToUsdPair(source, target))
-            {
-                return normalizedRate > 0 ? 1d / normalizedRate : 0d;
-            }
-
-            return normalizedRate;
         }
 
         private bool TryParseCurrency(ComboBox combo, out Currency currency)
