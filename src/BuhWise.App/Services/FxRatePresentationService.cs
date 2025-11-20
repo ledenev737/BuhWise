@@ -23,7 +23,8 @@ namespace BuhWise.Services
     {
         private readonly HashSet<(Currency From, Currency To)> _invertedPairs = new()
         {
-            (Currency.RUB, Currency.USD)
+            (Currency.RUB, Currency.USD),
+            (Currency.RUB, Currency.EUR)
         };
 
         public FxRateDisplayMode GetDisplayMode(Currency fromCurrency, Currency toCurrency)
