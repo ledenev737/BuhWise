@@ -1,0 +1,38 @@
+# Build artifacts
+bin/
+obj/
+
+# Visual Studio cache/options
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# WPF auto-generated files
+*.g.cs
+*.g.i.cs
+
+# Rider / ReSharper
+.idea/
+*.sln.iml
+
+# NuGet packages
+*.nupkg
+packages/
+
+# Test results
+TestResult*/
+*.trx
+
+# Others
+*.cache
+*.db
