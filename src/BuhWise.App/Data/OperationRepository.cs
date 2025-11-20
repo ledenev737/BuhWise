@@ -173,10 +173,12 @@ namespace BuhWise.Data
 
             foreach (var operation in ordered)
             {
-                InsertOperation(operation, connection, transaction);
-                UpdateBalances(operation, connection, transaction);
-                UpdateRates(operation, connection, transaction);
-                UpdateRateMemory(operation, connection, transaction);
+                var normalized = NormalizeOperation(operation);
+
+                InsertOperation(normalized, connection, transaction);
+                UpdateBalances(normalized, connection, transaction);
+                UpdateRates(normalized, connection, transaction);
+                UpdateRateMemory(normalized, connection, transaction);
             }
 
             transaction.Commit();
@@ -392,7 +394,9 @@ namespace BuhWise.Data
         private Operation BuildOperation(OperationDraft draft)
         {
             var targetCurrency = draft.Type == OperationType.Exchange ? draft.TargetCurrency : draft.SourceCurrency;
-            var targetAmount = draft.Type == OperationType.Exchange ? CalculateExchangeAmount(draft) : draft.SourceAmount;
+            var (targetAmount, canonicalRate) = draft.Type == OperationType.Exchange
+                ? CalculateExchange(draft)
+                : (draft.SourceAmount, draft.Rate);
             var usdEquivalent = CalculateUsdEquivalent(draft, targetAmount);
 
             return new Operation
@@ -403,7 +407,7 @@ namespace BuhWise.Data
                 SourceAmount = draft.SourceAmount,
                 TargetCurrency = targetCurrency,
                 TargetAmount = targetAmount,
-                Rate = draft.Rate,
+                Rate = canonicalRate,
                 Commission = draft.Commission,
                 UsdEquivalent = usdEquivalent,
                 ExpenseCategory = draft.Type == OperationType.Expense ? draft.ExpenseCategory : null,
@@ -432,15 +436,17 @@ namespace BuhWise.Data
             return JsonSerializer.Serialize(payload);
         }
 
-        private double CalculateExchangeAmount(OperationDraft draft)
+        private static (double TargetAmount, double CanonicalRate) CalculateExchange(OperationDraft draft)
         {
-            var converted = draft.SourceAmount * draft.Rate;
-            if (draft.Commission is { } commission && commission > 0)
-            {
-                converted -= commission;
-            }
+            var baseConverted = draft.SourceAmount * draft.Rate;
+            var fee = draft.Commission ?? 0;
+            var finalTarget = Math.Max(0, baseConverted - fee);
 
-            return Math.Max(0, converted);
+            var canonicalRate = draft.SourceAmount > 0
+                ? finalTarget / draft.SourceAmount
+                : 0d;
+
+            return (finalTarget, canonicalRate);
         }
 
         private double CalculateUsdEquivalent(OperationDraft draft, double targetAmount)
@@ -490,6 +496,16 @@ namespace BuhWise.Data
                 ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
                 ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
             };
+        }
+
+        private static Operation NormalizeOperation(Operation operation)
+        {
+            if (operation.Type == OperationType.Exchange && operation.SourceAmount > 0)
+            {
+                operation.Rate = operation.TargetAmount / operation.SourceAmount;
+            }
+
+            return operation;
         }
 
         private static double GetBalance(SqliteConnection connection, SqliteTransaction transaction, Currency currency)
