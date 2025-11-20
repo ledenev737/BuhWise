@@ -1,0 +1,54 @@
+<Window x:Class="BuhWise.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="История изменений"
+        Height="400"
+        Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E"
+        Foreground="White">
+    <Grid Margin="12">
+        <DataGrid x:Name="HistoryGrid"
+                  AutoGenerateColumns="False"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  Background="#202020"
+                  Foreground="#EEEEEE"
+                  RowBackground="#202020"
+                  AlternatingRowBackground="#2A2A2A"
+                  AlternationCount="2"
+                  BorderBrush="#444444"
+                  GridLinesVisibility="All"
+                  HorizontalGridLinesBrush="#444444"
+                  VerticalGridLinesBrush="#444444"
+                  HeadersVisibility="Column"
+                  IsReadOnly="True"
+                  CanUserAddRows="False">
+            <DataGrid.Resources>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Foreground" Value="#EEEEEE" />
+                    <Setter Property="Background" Value="{x:Null}" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                </Style>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Foreground" Value="#EEEEEE" />
+                    <Setter Property="Background" Value="{x:Null}" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                    <Setter Property="BorderThickness" Value="0.5" />
+                </Style>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Foreground" Value="White" />
+                    <Setter Property="Background" Value="#303030" />
+                    <Setter Property="BorderBrush" Value="#444444" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Дата/время" Binding="{Binding Timestamp, StringFormat=yyyy-MM-dd HH:mm:ss}" Width="160" />
+                <DataGridTextColumn Header="Действие" Binding="{Binding Action}" Width="100" />
+                <DataGridTextColumn Header="Id операции" Binding="{Binding OperationId}" Width="120" />
+                <DataGridTextColumn Header="Причина" Binding="{Binding Reason}" Width="150" />
+                <DataGridTextColumn Header="Детали" Binding="{Binding Details}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>
