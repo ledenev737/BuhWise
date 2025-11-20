@@ -57,6 +57,26 @@ namespace BuhWise.Data
             return rates;
         }
 
+        public double? GetLastPairRate(Currency from, Currency to)
+        {
+            using var connection = _database.GetConnection();
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"SELECT LastRate FROM ExchangeRateMemory
+                                    WHERE FromCurrency = $from AND ToCurrency = $to";
+            command.Parameters.AddWithValue("$from", from.ToString());
+            command.Parameters.AddWithValue("$to", to.ToString());
+
+            var result = command.ExecuteScalar();
+            return result switch
+            {
+                double d => d,
+                null => null,
+                _ => Convert.ToDouble(result, CultureInfo.InvariantCulture)
+            };
+        }
+
         public List<Operation> GetOperations()
         {
             var operations = new List<Operation>();
@@ -101,6 +121,7 @@ namespace BuhWise.Data
             InsertOperation(operation, connection, transaction);
             UpdateBalances(operation, connection, transaction);
             UpdateRates(operation, connection, transaction);
+            UpdateRateMemory(operation, connection, transaction);
             TryLogOperationChange(operation, "Create", null, connection, transaction);
 
             transaction.Commit();
@@ -148,12 +169,14 @@ namespace BuhWise.Data
             ClearOperations(connection, transaction);
             ResetBalances(connection, transaction);
             ResetRates(connection, transaction);
+            ResetRateMemory(connection, transaction);
 
             foreach (var operation in ordered)
             {
                 InsertOperation(operation, connection, transaction);
                 UpdateBalances(operation, connection, transaction);
                 UpdateRates(operation, connection, transaction);
+                UpdateRateMemory(operation, connection, transaction);
             }
 
             transaction.Commit();
@@ -255,6 +278,14 @@ namespace BuhWise.Data
             }
         }
 
+        private static void ResetRateMemory(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            using var clear = connection.CreateCommand();
+            clear.Transaction = transaction;
+            clear.CommandText = "DELETE FROM ExchangeRateMemory";
+            clear.ExecuteNonQuery();
+        }
+
         private static void UpdateBalances(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
         {
             void ApplyDelta(Currency currency, double delta)
@@ -338,6 +369,24 @@ namespace BuhWise.Data
             {
                 UpsertRate(operation.SourceCurrency, operation.Rate);
             }
+        }
+
+        private static void UpdateRateMemory(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
+        {
+            if (operation.Type != OperationType.Exchange)
+            {
+                return;
+            }
+
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = @"INSERT OR REPLACE INTO ExchangeRateMemory (FromCurrency, ToCurrency, LastRate, UpdatedAt)
+                                    VALUES ($from, $to, $rate, $updatedAt)";
+            command.Parameters.AddWithValue("$from", operation.SourceCurrency.ToString());
+            command.Parameters.AddWithValue("$to", operation.TargetCurrency.ToString());
+            command.Parameters.AddWithValue("$rate", operation.Rate);
+            command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+            command.ExecuteNonQuery();
         }
 
         private Operation BuildOperation(OperationDraft draft)

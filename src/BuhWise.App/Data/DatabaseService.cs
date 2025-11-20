@@ -69,6 +69,18 @@ namespace BuhWise.Data
 
             using (var command = connection.CreateCommand())
             {
+                command.CommandText = @"CREATE TABLE IF NOT EXISTS ExchangeRateMemory (
+                    FromCurrency TEXT NOT NULL,
+                    ToCurrency TEXT NOT NULL,
+                    LastRate REAL NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    PRIMARY KEY (FromCurrency, ToCurrency)
+                );";
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = connection.CreateCommand())
+            {
                 command.CommandText = @"CREATE TABLE IF NOT EXISTS OperationChanges (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     OperationId INTEGER NULL,

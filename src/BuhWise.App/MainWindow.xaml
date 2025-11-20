@@ -59,7 +59,7 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="0">
                     <TextBlock Text="Исходная валюта" Margin="0 0 0 4" />
-                    <ComboBox x:Name="SourceCurrencyBox" SelectedIndex="0" Height="28">
+                    <ComboBox x:Name="SourceCurrencyBox" SelectedIndex="0" Height="28" SelectionChanged="CurrencyBox_SelectionChanged">
                         <ComboBoxItem Content="USD" Tag="USD" />
                         <ComboBoxItem Content="EUR" Tag="EUR" />
                         <ComboBoxItem Content="RUB" Tag="RUB" />
@@ -68,7 +68,7 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="2" Grid.Row="0">
                     <TextBlock Text="Конечная валюта" Margin="0 0 0 4" />
-                    <ComboBox x:Name="TargetCurrencyBox" SelectedIndex="1" Height="28" IsEnabled="False">
+                    <ComboBox x:Name="TargetCurrencyBox" SelectedIndex="1" Height="28" IsEnabled="False" SelectionChanged="CurrencyBox_SelectionChanged">
                         <ComboBoxItem Content="USD" Tag="USD" />
                         <ComboBoxItem Content="EUR" Tag="EUR" />
                         <ComboBoxItem Content="RUB" Tag="RUB" />

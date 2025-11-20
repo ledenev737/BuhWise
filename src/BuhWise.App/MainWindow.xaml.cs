@@ -17,6 +17,9 @@ namespace BuhWise
         private readonly ObservableCollection<Operation> _operations = new();
         private readonly Dictionary<Currency, double> _balanceCache = new();
         private readonly SpreadsheetService _spreadsheetService = new();
+        private string? _currentRatePairKey;
+        private bool _rateEditedByUser;
+        private bool _suppressRateTextChange;
 
         public MainWindow()
         {
@@ -26,6 +29,11 @@ namespace BuhWise
             _repository = new OperationRepository(new DatabaseService(dbPath));
 
             Loaded += MainWindow_Loaded;
+
+            if (RateBox != null)
+            {
+                RateBox.TextChanged += RateBox_TextChanged;
+            }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -33,6 +41,7 @@ namespace BuhWise
             LoadOperations();
             RefreshBalances();
             UpdateFieldStates();
+            MaybePrefillRateFromMemory();
             UpdateDeleteButtonState();
         }
 
@@ -187,12 +196,20 @@ namespace BuhWise
             DateBox.SelectedDate = DateTime.Today;
             ExpenseCategoryBox.SelectedIndex = -1;
             ExpenseCommentBox.Text = string.Empty;
+            _currentRatePairKey = null;
+            _rateEditedByUser = false;
             UpdateFieldStates();
         }
 
         private void OperationTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateFieldStates();
+            MaybePrefillRateFromMemory();
+        }
+
+        private void CurrencyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            MaybePrefillRateFromMemory();
         }
 
         private void OperationsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -280,6 +297,12 @@ namespace BuhWise
             {
                 ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
             }
+
+            if (!isExchange)
+            {
+                _currentRatePairKey = null;
+                _rateEditedByUser = false;
+            }
         }
 
         private void UpdateDeleteButtonState()
@@ -315,6 +338,56 @@ namespace BuhWise
             return _balanceCache.TryGetValue(currency, out var value) ? value : 0d;
         }
 
+        private void RateBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressRateTextChange)
+            {
+                return;
+            }
+
+            _rateEditedByUser = true;
+        }
+
+        private void MaybePrefillRateFromMemory()
+        {
+            var type = GetSelectedOperationType();
+            if (type != OperationType.Exchange)
+            {
+                return;
+            }
+
+            if (!TryParseCurrency(SourceCurrencyBox, out var source) || !TryParseCurrency(TargetCurrencyBox, out var target))
+            {
+                return;
+            }
+
+            var pairKey = $"{source}-{target}";
+            var pairChanged = _currentRatePairKey != pairKey;
+            if (pairChanged)
+            {
+                _currentRatePairKey = pairKey;
+                _rateEditedByUser = false;
+            }
+
+            if (_rateEditedByUser)
+            {
+                return;
+            }
+
+            var lastRate = _repository.GetLastPairRate(source, target);
+            _suppressRateTextChange = true;
+            if (lastRate.HasValue)
+            {
+                RateBox.Text = lastRate.Value.ToString("F4", CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                RateBox.Text = string.Empty;
+            }
+
+            _suppressRateTextChange = false;
+        }
+
         private void MaxAmountButton_Click(object sender, RoutedEventArgs e)
         {
             if (GetSelectedOperationType() != OperationType.Exchange)
@@ -338,6 +411,19 @@ namespace BuhWise
             {
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private bool TryParseCurrency(ComboBox combo, out Currency currency)
+        {
+            currency = default;
+
+            if (combo?.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out Currency parsed))
+            {
+                currency = parsed;
+                return true;
+            }
+
+            return false;
         }
 
         private void ExportToXlsx_Click(object sender, RoutedEventArgs e)
