@@ -94,7 +94,7 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="1">
-                    <TextBlock Text="Курс" Margin="0 0 0 4" />
+                    <TextBlock x:Name="RateLabel" Text="Курс" Margin="0 0 0 4" />
                     <TextBox x:Name="RateBox" Height="28" />
                 </StackPanel>
 

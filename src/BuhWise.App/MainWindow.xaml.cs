@@ -122,6 +122,10 @@ namespace BuhWise
                     }
                 }
 
+                var normalizedRate = isExchange
+                    ? NormalizeExchangeRate(sourceCurrency, targetCurrency, rate)
+                    : rate;
+
                 var draft = new OperationDraft
                 {
                     Date = date,
@@ -129,7 +133,7 @@ namespace BuhWise
                     SourceCurrency = sourceCurrency,
                     TargetCurrency = targetCurrency,
                     SourceAmount = amount,
-                    Rate = rate,
+                    Rate = normalizedRate,
                     Commission = commission,
                     ExpenseCategory = expenseCategory,
                     ExpenseComment = expenseComment
@@ -209,6 +213,7 @@ namespace BuhWise
 
         private void CurrencyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            UpdateFieldStates();
             MaybePrefillRateFromMemory();
         }
 
@@ -267,6 +272,9 @@ namespace BuhWise
             var type = GetSelectedOperationType();
             var isExchange = type == OperationType.Exchange;
             var isExpense = type == OperationType.Expense;
+            var hasSource = TryParseCurrency(SourceCurrencyBox, out var sourceCurrency);
+            var hasTarget = TryParseCurrency(TargetCurrencyBox, out var targetCurrency);
+            var isRubToUsd = isExchange && hasSource && hasTarget && IsRubToUsdPair(sourceCurrency, targetCurrency);
 
             if (TargetCurrencyBox != null)
             {
@@ -296,6 +304,11 @@ namespace BuhWise
             if (ExpenseCommentPanel != null)
             {
                 ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (RateLabel != null)
+            {
+                RateLabel.Text = isRubToUsd ? "Курс (USD/RUB)" : "Курс";
             }
 
             if (!isExchange)
@@ -378,7 +391,10 @@ namespace BuhWise
             _suppressRateTextChange = true;
             if (lastRate.HasValue)
             {
-                RateBox.Text = lastRate.Value.ToString("F4", CultureInfo.InvariantCulture);
+                var displayRate = ToDisplayRate(source, target, lastRate.Value);
+                RateBox.Text = displayRate > 0
+                    ? displayRate.ToString("F4", CultureInfo.InvariantCulture)
+                    : string.Empty;
             }
             else
             {
@@ -411,6 +427,36 @@ namespace BuhWise
             {
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private static bool IsRubToUsdPair(Currency source, Currency target)
+        {
+            return source == Currency.RUB && target == Currency.USD;
+        }
+
+        private static double NormalizeExchangeRate(Currency source, Currency target, double userRate)
+        {
+            if (IsRubToUsdPair(source, target))
+            {
+                if (userRate <= 0)
+                {
+                    throw new InvalidOperationException("Курс должен быть больше нуля");
+                }
+
+                return 1d / userRate;
+            }
+
+            return userRate;
+        }
+
+        private static double ToDisplayRate(Currency source, Currency target, double normalizedRate)
+        {
+            if (IsRubToUsdPair(source, target))
+            {
+                return normalizedRate > 0 ? 1d / normalizedRate : 0d;
+            }
+
+            return normalizedRate;
         }
 
         private bool TryParseCurrency(ComboBox combo, out Currency currency)
