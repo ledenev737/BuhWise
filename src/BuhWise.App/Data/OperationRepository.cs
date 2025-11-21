@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using BuhWise.Models;
 using Microsoft.Data.Sqlite;
-using System.Text.Json;
 
 namespace BuhWise.Data
 {
@@ -19,9 +19,9 @@ namespace BuhWise.Data
             _database.EnsureCreated();
         }
 
-        public IReadOnlyDictionary<Currency, double> GetBalances()
+        public IReadOnlyDictionary<string, double> GetBalances()
         {
-            var balances = new Dictionary<Currency, double>();
+            var balances = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             using var connection = _database.GetConnection();
             connection.Open();
 
@@ -30,7 +30,7 @@ namespace BuhWise.Data
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                var currency = Enum.Parse<Currency>(reader.GetString(0));
+                var currency = reader.GetString(0);
                 var amount = reader.GetDouble(1);
                 balances[currency] = amount;
             }
@@ -38,9 +38,9 @@ namespace BuhWise.Data
             return balances;
         }
 
-        public IReadOnlyDictionary<Currency, double> GetUsdRates()
+        public IReadOnlyDictionary<string, double> GetUsdRates()
         {
-            var rates = new Dictionary<Currency, double>();
+            var rates = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             using var connection = _database.GetConnection();
             connection.Open();
 
@@ -49,15 +49,13 @@ namespace BuhWise.Data
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                var currency = Enum.Parse<Currency>(reader.GetString(0));
-                var rate = reader.GetDouble(1);
-                rates[currency] = rate;
+                rates[reader.GetString(0)] = reader.GetDouble(1);
             }
 
             return rates;
         }
 
-        public double? GetLastPairRate(Currency from, Currency to)
+        public double? GetLastPairRate(string from, string to)
         {
             using var connection = _database.GetConnection();
             connection.Open();
@@ -65,8 +63,8 @@ namespace BuhWise.Data
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT LastRate FROM ExchangeRateMemory
                                     WHERE FromCurrency = $from AND ToCurrency = $to";
-            command.Parameters.AddWithValue("$from", from.ToString());
-            command.Parameters.AddWithValue("$to", to.ToString());
+            command.Parameters.AddWithValue("$from", from);
+            command.Parameters.AddWithValue("$to", to);
 
             var result = command.ExecuteScalar();
             return result switch
@@ -94,9 +92,9 @@ namespace BuhWise.Data
                     Id = reader.GetInt64(0),
                     Date = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
                     Type = Enum.Parse<OperationType>(reader.GetString(2)),
-                    SourceCurrency = Enum.Parse<Currency>(reader.GetString(3)),
+                    SourceCurrency = reader.GetString(3),
                     SourceAmount = reader.GetDouble(4),
-                    TargetCurrency = Enum.Parse<Currency>(reader.GetString(5)),
+                    TargetCurrency = reader.GetString(5),
                     TargetAmount = reader.GetDouble(6),
                     Rate = reader.GetDouble(7),
                     Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
@@ -109,6 +107,77 @@ namespace BuhWise.Data
             return operations;
         }
 
+        public IEnumerable<Currency> GetCurrencies(bool activeOnly = true)
+        {
+            var currencies = new List<Currency>();
+            using var connection = _database.GetConnection();
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT Id, Code, Name, IsActive FROM Currencies" + (activeOnly ? " WHERE IsActive = 1" : string.Empty) + " ORDER BY Code";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                currencies.Add(new Currency
+                {
+                    Id = reader.GetInt64(0),
+                    Code = reader.GetString(1),
+                    Name = reader.GetString(2),
+                    IsActive = reader.GetInt64(3) == 1
+                });
+            }
+
+            return currencies;
+        }
+
+        public void AddCurrency(Currency currency)
+        {
+            using var connection = _database.GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            using (var insert = connection.CreateCommand())
+            {
+                insert.Transaction = transaction;
+                insert.CommandText = @"INSERT INTO Currencies (Code, Name, IsActive) VALUES ($code, $name, $active)";
+                insert.Parameters.AddWithValue("$code", currency.Code);
+                insert.Parameters.AddWithValue("$name", currency.Name);
+                insert.Parameters.AddWithValue("$active", currency.IsActive ? 1 : 0);
+                insert.ExecuteNonQuery();
+            }
+
+            if (currency.IsActive)
+            {
+                DatabaseService.EnsureCurrencyRows(connection, currency.Code);
+            }
+
+            transaction.Commit();
+        }
+
+        public void UpdateCurrency(Currency currency)
+        {
+            using var connection = _database.GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            using (var update = connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE Currencies SET Name = $name, IsActive = $active WHERE Code = $code";
+                update.Parameters.AddWithValue("$name", currency.Name);
+                update.Parameters.AddWithValue("$active", currency.IsActive ? 1 : 0);
+                update.Parameters.AddWithValue("$code", currency.Code);
+                update.ExecuteNonQuery();
+            }
+
+            if (currency.IsActive)
+            {
+                DatabaseService.EnsureCurrencyRows(connection, currency.Code);
+            }
+
+            transaction.Commit();
+        }
+
         public Operation AddOperation(OperationDraft draft)
         {
             var operation = BuildOperation(draft);
@@ -116,6 +185,9 @@ namespace BuhWise.Data
             using var connection = _database.GetConnection();
             connection.Open();
             using var transaction = connection.BeginTransaction();
+
+            EnsureCurrencyExists(connection, transaction, operation.SourceCurrency);
+            EnsureCurrencyExists(connection, transaction, operation.TargetCurrency);
 
             EnsureSufficientFunds(operation, connection, transaction);
             InsertOperation(operation, connection, transaction);
@@ -157,10 +229,7 @@ namespace BuhWise.Data
 
         public void ReplaceAllOperations(IEnumerable<Operation> operations)
         {
-            var ordered = operations
-                .OrderBy(o => o.Date)
-                .ThenBy(o => o.Id)
-                .ToList();
+            var ordered = operations.OrderBy(o => o.Date).ThenBy(o => o.Id).ToList();
 
             using var connection = _database.GetConnection();
             connection.Open();
@@ -174,6 +243,9 @@ namespace BuhWise.Data
             foreach (var operation in ordered)
             {
                 var normalized = NormalizeOperation(operation);
+
+                EnsureCurrencyExists(connection, transaction, normalized.SourceCurrency);
+                EnsureCurrencyExists(connection, transaction, normalized.TargetCurrency);
 
                 InsertOperation(normalized, connection, transaction);
                 UpdateBalances(normalized, connection, transaction);
@@ -225,9 +297,9 @@ namespace BuhWise.Data
 
             command.Parameters.AddWithValue("$date", operation.Date.ToString("O"));
             command.Parameters.AddWithValue("$type", operation.Type.ToString());
-            command.Parameters.AddWithValue("$sourceCurrency", operation.SourceCurrency.ToString());
+            command.Parameters.AddWithValue("$sourceCurrency", operation.SourceCurrency);
             command.Parameters.AddWithValue("$sourceAmount", operation.SourceAmount);
-            command.Parameters.AddWithValue("$targetCurrency", operation.TargetCurrency.ToString());
+            command.Parameters.AddWithValue("$targetCurrency", operation.TargetCurrency);
             command.Parameters.AddWithValue("$targetAmount", operation.TargetAmount);
             command.Parameters.AddWithValue("$rate", operation.Rate);
             command.Parameters.AddWithValue("$commission", (object?)operation.Commission ?? DBNull.Value);
@@ -260,7 +332,7 @@ namespace BuhWise.Data
             reset.ExecuteNonQuery();
         }
 
-        private static void ResetRates(SqliteConnection connection, SqliteTransaction transaction)
+        private void ResetRates(SqliteConnection connection, SqliteTransaction transaction)
         {
             using (var clear = connection.CreateCommand())
             {
@@ -269,13 +341,13 @@ namespace BuhWise.Data
                 clear.ExecuteNonQuery();
             }
 
-            foreach (var currency in Enum.GetValues<Currency>())
+            foreach (var code in GetActiveCurrencyCodes(connection, transaction))
             {
                 using var insert = connection.CreateCommand();
                 insert.Transaction = transaction;
                 insert.CommandText = "INSERT INTO Rates (Currency, RateToUsd) VALUES ($currency, $rate)";
-                insert.Parameters.AddWithValue("$currency", currency.ToString());
-                insert.Parameters.AddWithValue("$rate", currency == Currency.USD ? 1 : 0);
+                insert.Parameters.AddWithValue("$currency", code);
+                insert.Parameters.AddWithValue("$rate", string.Equals(code, "USD", StringComparison.OrdinalIgnoreCase) ? 1 : 0);
                 insert.ExecuteNonQuery();
             }
         }
@@ -290,13 +362,13 @@ namespace BuhWise.Data
 
         private static void UpdateBalances(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
         {
-            void ApplyDelta(Currency currency, double delta)
+            void ApplyDelta(string currency, double delta)
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = "UPDATE Balances SET Amount = Amount + $delta WHERE Currency = $currency";
                 command.Parameters.AddWithValue("$delta", delta);
-                command.Parameters.AddWithValue("$currency", currency.ToString());
+                command.Parameters.AddWithValue("$currency", currency);
                 command.ExecuteNonQuery();
             }
 
@@ -317,13 +389,13 @@ namespace BuhWise.Data
 
         private static void ReverseBalances(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
         {
-            void ApplyDelta(Currency currency, double delta)
+            void ApplyDelta(string currency, double delta)
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = "UPDATE Balances SET Amount = Amount + $delta WHERE Currency = $currency";
                 command.Parameters.AddWithValue("$delta", delta);
-                command.Parameters.AddWithValue("$currency", currency.ToString());
+                command.Parameters.AddWithValue("$currency", currency);
                 command.ExecuteNonQuery();
             }
 
@@ -342,32 +414,31 @@ namespace BuhWise.Data
             }
         }
 
-        private void UpdateRates(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
+        private static void UpdateRates(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
         {
-            // Persist last-known USD-cross rates to simplify cross-currency USD equivalents.
-            void UpsertRate(Currency currency, double rateToUsd)
+            void UpsertRate(string currency, double rateToUsd)
             {
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = @"INSERT OR REPLACE INTO Rates (Currency, RateToUsd) VALUES ($currency, $rate)";
-                command.Parameters.AddWithValue("$currency", currency.ToString());
+                command.Parameters.AddWithValue("$currency", currency);
                 command.Parameters.AddWithValue("$rate", rateToUsd);
                 command.ExecuteNonQuery();
             }
 
             if (operation.Type == OperationType.Exchange)
             {
-                if (operation.TargetCurrency == Currency.USD && operation.Rate > 0)
+                if (string.Equals(operation.TargetCurrency, "USD", StringComparison.OrdinalIgnoreCase) && operation.Rate > 0)
                 {
                     UpsertRate(operation.SourceCurrency, operation.Rate);
                 }
-                else if (operation.SourceCurrency == Currency.USD && operation.Rate > 0)
+                else if (string.Equals(operation.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) && operation.Rate > 0)
                 {
                     var inverted = operation.Rate > 0 ? 1 / operation.Rate : 0;
                     UpsertRate(operation.TargetCurrency, inverted);
                 }
             }
-            else if (operation.SourceCurrency != Currency.USD && operation.Rate > 0)
+            else if (!string.Equals(operation.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) && operation.Rate > 0)
             {
                 UpsertRate(operation.SourceCurrency, operation.Rate);
             }
@@ -384,8 +455,8 @@ namespace BuhWise.Data
             command.Transaction = transaction;
             command.CommandText = @"INSERT OR REPLACE INTO ExchangeRateMemory (FromCurrency, ToCurrency, LastRate, UpdatedAt)
                                     VALUES ($from, $to, $rate, $updatedAt)";
-            command.Parameters.AddWithValue("$from", operation.SourceCurrency.ToString());
-            command.Parameters.AddWithValue("$to", operation.TargetCurrency.ToString());
+            command.Parameters.AddWithValue("$from", operation.SourceCurrency);
+            command.Parameters.AddWithValue("$to", operation.TargetCurrency);
             command.Parameters.AddWithValue("$rate", operation.Rate);
             command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
             command.ExecuteNonQuery();
@@ -422,9 +493,9 @@ namespace BuhWise.Data
                 operation.Id,
                 Date = operation.Date.ToString("o", CultureInfo.InvariantCulture),
                 Type = operation.Type.ToString(),
-                SourceCurrency = operation.SourceCurrency.ToString(),
+                SourceCurrency = operation.SourceCurrency,
                 operation.SourceAmount,
-                TargetCurrency = operation.TargetCurrency.ToString(),
+                TargetCurrency = operation.TargetCurrency,
                 operation.TargetAmount,
                 operation.Rate,
                 operation.Commission,
@@ -452,16 +523,20 @@ namespace BuhWise.Data
         private double CalculateUsdEquivalent(OperationDraft draft, double targetAmount)
         {
             var rates = GetUsdRates();
-            double GetRate(Currency c) => rates.TryGetValue(c, out var r) ? r : 0;
+            double GetRate(string c) => rates.TryGetValue(c, out var r) ? r : 0;
 
             return draft.Type switch
             {
-                OperationType.Income => draft.SourceCurrency == Currency.USD ? draft.SourceAmount : draft.SourceAmount * draft.Rate,
-                OperationType.Expense => draft.SourceCurrency == Currency.USD ? draft.SourceAmount : draft.SourceAmount * draft.Rate,
+                OperationType.Income => string.Equals(draft.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase)
+                    ? draft.SourceAmount
+                    : draft.SourceAmount * draft.Rate,
+                OperationType.Expense => string.Equals(draft.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase)
+                    ? draft.SourceAmount
+                    : draft.SourceAmount * draft.Rate,
                 OperationType.Exchange => draft.TargetCurrency switch
                 {
-                    Currency.USD => targetAmount,
-                    _ when draft.SourceCurrency == Currency.USD => draft.SourceAmount,
+                    var t when string.Equals(t, "USD", StringComparison.OrdinalIgnoreCase) => targetAmount,
+                    _ when string.Equals(draft.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) => draft.SourceAmount,
                     _ => targetAmount * GetRate(draft.TargetCurrency)
                 },
                 _ => 0
@@ -486,9 +561,9 @@ namespace BuhWise.Data
                 Id = reader.GetInt64(0),
                 Date = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
                 Type = Enum.Parse<OperationType>(reader.GetString(2)),
-                SourceCurrency = Enum.Parse<Currency>(reader.GetString(3)),
+                SourceCurrency = reader.GetString(3),
                 SourceAmount = reader.GetDouble(4),
-                TargetCurrency = Enum.Parse<Currency>(reader.GetString(5)),
+                TargetCurrency = reader.GetString(5),
                 TargetAmount = reader.GetDouble(6),
                 Rate = reader.GetDouble(7),
                 Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
@@ -508,12 +583,12 @@ namespace BuhWise.Data
             return operation;
         }
 
-        private static double GetBalance(SqliteConnection connection, SqliteTransaction transaction, Currency currency)
+        private static double GetBalance(SqliteConnection connection, SqliteTransaction transaction, string currency)
         {
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "SELECT Amount FROM Balances WHERE Currency = $currency";
-            command.Parameters.AddWithValue("$currency", currency.ToString());
+            command.Parameters.AddWithValue("$currency", currency);
             var result = command.ExecuteScalar();
             return result switch
             {
@@ -559,6 +634,35 @@ namespace BuhWise.Data
             {
                 Debug.WriteLine($"Failed to log operation change: {ex.Message}");
             }
+        }
+
+        private static IEnumerable<string> GetActiveCurrencyCodes(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            var codes = new List<string>();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT Code FROM Currencies WHERE IsActive = 1";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                codes.Add(reader.GetString(0));
+            }
+
+            return codes;
+        }
+
+        private static void EnsureCurrencyExists(SqliteConnection connection, SqliteTransaction transaction, string code)
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "INSERT OR IGNORE INTO Currencies (Code, Name, IsActive) VALUES ($code, $name, 1)";
+                command.Parameters.AddWithValue("$code", code);
+                command.Parameters.AddWithValue("$name", code);
+                command.ExecuteNonQuery();
+            }
+
+            DatabaseService.EnsureCurrencyRows(connection, code);
         }
     }
 }

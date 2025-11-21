@@ -1,9 +1,12 @@
 namespace BuhWise.Models
 {
-    public enum Currency
+    public class Currency
     {
-        USD,
-        EUR,
-        RUB
+        public long Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public bool IsActive { get; set; } = true;
+
+        public override string ToString() => Code;
     }
 }

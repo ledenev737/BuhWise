@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using BuhWise.Data;
@@ -15,9 +16,10 @@ namespace BuhWise
     {
         private readonly OperationRepository _repository;
         private readonly ObservableCollection<Operation> _operations = new();
-        private readonly Dictionary<Currency, double> _balanceCache = new();
+        private readonly Dictionary<string, double> _balanceCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly SpreadsheetService _spreadsheetService = new();
-        private readonly IFxRatePresentationService _ratePresentationService = new FxRatePresentationService();
+        private readonly IFxRatePresentationService _ratePresentationService;
+        private readonly DatabaseService _database;
         private string? _currentRatePairKey;
         private bool _rateEditedByUser;
         private bool _suppressRateTextChange;
@@ -27,7 +29,9 @@ namespace BuhWise
             InitializeComponent();
 
             var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
-            _repository = new OperationRepository(new DatabaseService(dbPath));
+            _database = new DatabaseService(dbPath);
+            _repository = new OperationRepository(_database);
+            _ratePresentationService = new FxRatePresentationService(_database);
 
             Loaded += MainWindow_Loaded;
 
@@ -39,11 +43,29 @@ namespace BuhWise
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            LoadCurrencies();
             LoadOperations();
             RefreshBalances();
             UpdateFieldStates();
             MaybePrefillRateFromMemory();
             UpdateDeleteButtonState();
+        }
+
+        private void LoadCurrencies()
+        {
+            var currencies = _repository.GetCurrencies().ToList();
+            SourceCurrencyBox.ItemsSource = currencies;
+            TargetCurrencyBox.ItemsSource = currencies;
+
+            if (SourceCurrencyBox.SelectedItem == null && currencies.Count > 0)
+            {
+                SourceCurrencyBox.SelectedIndex = 0;
+            }
+
+            if (TargetCurrencyBox.SelectedItem == null && currencies.Count > 1)
+            {
+                TargetCurrencyBox.SelectedIndex = 1;
+            }
         }
 
         private void LoadOperations()
@@ -67,9 +89,9 @@ namespace BuhWise
                 _balanceCache[entry.Key] = entry.Value;
             }
 
-            UsdBalance.Text = balances.TryGetValue(Currency.USD, out var usd) ? usd.ToString("F2") : "0";
-            EurBalance.Text = balances.TryGetValue(Currency.EUR, out var eur) ? eur.ToString("F2") : "0";
-            RubBalance.Text = balances.TryGetValue(Currency.RUB, out var rub) ? rub.ToString("F2") : "0";
+            UsdBalance.Text = balances.TryGetValue("USD", out var usd) ? usd.ToString("F2") : "0";
+            EurBalance.Text = balances.TryGetValue("EUR", out var eur) ? eur.ToString("F2") : "0";
+            RubBalance.Text = balances.TryGetValue("RUB", out var rub) ? rub.ToString("F2") : "0";
         }
 
         private void AddOperation_Click(object sender, RoutedEventArgs e)
@@ -77,10 +99,10 @@ namespace BuhWise
             try
             {
                 var type = ParseOperationType(OperationTypeBox);
-                var sourceCurrency = ParseCurrency(SourceCurrencyBox);
+                var sourceCurrency = GetSelectedCurrencyCode(SourceCurrencyBox);
                 var isExchange = type == OperationType.Exchange;
                 var isExpense = type == OperationType.Expense;
-                var targetCurrency = isExchange ? ParseCurrency(TargetCurrencyBox) : sourceCurrency;
+                var targetCurrency = isExchange ? GetSelectedCurrencyCode(TargetCurrencyBox) : sourceCurrency;
                 var amount = ParseDouble(AmountBox.Text, "сумма");
                 var rateInput = isExchange ? ParseDouble(RateBox.Text, "курс") : GetCachedRateOrDefault(sourceCurrency);
                 var normalizedRate = isExchange
@@ -150,9 +172,9 @@ namespace BuhWise
             }
         }
 
-        private double GetCachedRateOrDefault(Currency sourceCurrency)
+        private double GetCachedRateOrDefault(string sourceCurrency)
         {
-            if (sourceCurrency == Currency.USD)
+            if (string.Equals(sourceCurrency, "USD", StringComparison.OrdinalIgnoreCase))
             {
                 return 1d;
             }
@@ -161,11 +183,16 @@ namespace BuhWise
             return cached.TryGetValue(sourceCurrency, out var rate) ? rate : 0d;
         }
 
-        private static Currency ParseCurrency(ComboBox combo)
+        private static string GetSelectedCurrencyCode(ComboBox combo)
         {
-            if (combo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            if (combo.SelectedItem is Currency currency)
             {
-                return Enum.Parse<Currency>(tag);
+                return currency.Code;
+            }
+
+            if (combo.SelectedValue is string code && !string.IsNullOrWhiteSpace(code))
+            {
+                return code;
             }
 
             throw new InvalidOperationException("Выберите валюту");
@@ -184,7 +211,7 @@ namespace BuhWise
 
         private static double ParseDouble(string input, string fieldName)
         {
-            if (!double.TryParse(input.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var value))
+            if (!double.TryParse(input.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             {
                 throw new InvalidOperationException($"Некорректное значение поля \"{fieldName}\"");
             }
@@ -267,6 +294,13 @@ namespace BuhWise
             history.ShowDialog();
         }
 
+        private void OpenCurrencies_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new CurrenciesWindow(_repository) { Owner = this };
+            window.ShowDialog();
+            LoadCurrencies();
+        }
+
         private void UpdateFieldStates()
         {
             var type = GetSelectedOperationType();
@@ -275,52 +309,30 @@ namespace BuhWise
             var hasSource = TryParseCurrency(SourceCurrencyBox, out var sourceCurrency);
             var hasTarget = TryParseCurrency(TargetCurrencyBox, out var targetCurrency);
             var mode = isExchange && hasSource && hasTarget
-                ? _ratePresentationService.GetDisplayMode(sourceCurrency, targetCurrency)
+                ? _ratePresentationService.GetDisplayMode(sourceCurrency!, targetCurrency!)
                 : FxRateDisplayMode.Direct;
 
-            if (TargetCurrencyBox != null)
-            {
-                TargetCurrencyBox.IsEnabled = isExchange;
-            }
+            TargetCurrencyBox.IsEnabled = isExchange;
+            RateBox.IsEnabled = isExchange;
+            FeeBox.IsEnabled = isExchange;
+            MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+            InvertToggle.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+            InvertToggle.IsEnabled = isExchange && hasSource && hasTarget;
+            InvertToggle.IsChecked = mode == FxRateDisplayMode.Inverted;
 
-            if (RateBox != null)
-            {
-                RateBox.IsEnabled = isExchange;
-            }
+            ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
 
-            if (FeeBox != null)
+            if (isExchange && hasSource && hasTarget)
             {
-                FeeBox.IsEnabled = isExchange;
+                var label = mode == FxRateDisplayMode.Inverted
+                    ? $"Курс ({targetCurrency}/{sourceCurrency})"
+                    : "Курс";
+                RateLabel.Text = label;
             }
-
-            if (MaxAmountButton != null)
+            else
             {
-                MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            if (ExpenseCategoryPanel != null)
-            {
-                ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            if (ExpenseCommentPanel != null)
-            {
-                ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            if (RateLabel != null)
-            {
-                if (isExchange && hasSource && hasTarget)
-                {
-                    var label = mode == FxRateDisplayMode.Inverted
-                        ? $"Курс ({targetCurrency}/{sourceCurrency})"
-                        : "Курс";
-                    RateLabel.Text = label;
-                }
-                else
-                {
-                    RateLabel.Text = "Курс";
-                }
+                RateLabel.Text = "Курс";
             }
 
             if (!isExchange)
@@ -332,10 +344,7 @@ namespace BuhWise
 
         private void UpdateDeleteButtonState()
         {
-            if (DeleteOperationButton != null)
-            {
-                DeleteOperationButton.IsEnabled = OperationsGrid?.SelectedItem is Operation;
-            }
+            DeleteOperationButton.IsEnabled = OperationsGrid?.SelectedItem is Operation;
         }
 
         private OperationType GetSelectedOperationType()
@@ -358,7 +367,7 @@ namespace BuhWise
             return null;
         }
 
-        private double GetAvailableBalance(Currency currency)
+        private double GetAvailableBalance(string currency)
         {
             return _balanceCache.TryGetValue(currency, out var value) ? value : 0d;
         }
@@ -404,11 +413,11 @@ namespace BuhWise
                 return;
             }
 
-            var lastRate = _repository.GetLastPairRate(source, target);
+            var lastRate = _repository.GetLastPairRate(source!, target!);
             _suppressRateTextChange = true;
             if (lastRate.HasValue)
             {
-                var displayRate = _ratePresentationService.ToDisplayRate(lastRate.Value, source, target);
+                var displayRate = _ratePresentationService.ToDisplayRate(lastRate.Value, source!, target!);
                 RateBox.Text = displayRate > 0
                     ? displayRate.ToString("F4", CultureInfo.InvariantCulture)
                     : string.Empty;
@@ -419,6 +428,7 @@ namespace BuhWise
             }
 
             _suppressRateTextChange = false;
+            UpdateFieldStates();
         }
 
         private void MaxAmountButton_Click(object sender, RoutedEventArgs e)
@@ -430,7 +440,7 @@ namespace BuhWise
 
             try
             {
-                var sourceCurrency = ParseCurrency(SourceCurrencyBox);
+                var sourceCurrency = GetSelectedCurrencyCode(SourceCurrencyBox);
                 var available = GetAvailableBalance(sourceCurrency);
                 if (available <= 0)
                 {
@@ -446,13 +456,19 @@ namespace BuhWise
             }
         }
 
-        private bool TryParseCurrency(ComboBox combo, out Currency currency)
+        private bool TryParseCurrency(ComboBox combo, out string? currency)
         {
-            currency = default;
+            currency = null;
 
-            if (combo?.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out Currency parsed))
+            if (combo?.SelectedItem is Currency item)
             {
-                currency = parsed;
+                currency = item.Code;
+                return true;
+            }
+
+            if (combo?.SelectedValue is string code && !string.IsNullOrWhiteSpace(code))
+            {
+                currency = code;
                 return true;
             }
 
@@ -522,6 +538,41 @@ namespace BuhWise
             {
                 MessageBox.Show(ex.Message, "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void InvertToggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (GetSelectedOperationType() != OperationType.Exchange)
+            {
+                return;
+            }
+
+            if (!TryParseCurrency(SourceCurrencyBox, out var source) || !TryParseCurrency(TargetCurrencyBox, out var target))
+            {
+                return;
+            }
+
+            var currentMode = _ratePresentationService.GetDisplayMode(source!, target!);
+            var newMode = currentMode == FxRateDisplayMode.Direct ? FxRateDisplayMode.Inverted : FxRateDisplayMode.Direct;
+
+            double? parsedDisplay = null;
+            if (double.TryParse(RateBox.Text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            {
+                parsedDisplay = parsed;
+            }
+
+            if (parsedDisplay.HasValue && parsedDisplay.Value > 0)
+            {
+                var internalRate = _ratePresentationService.ToInternalRate(parsedDisplay.Value, source!, target!);
+                var newDisplay = newMode == FxRateDisplayMode.Inverted ? 1d / internalRate : internalRate;
+                _suppressRateTextChange = true;
+                RateBox.Text = newDisplay.ToString("F4", CultureInfo.InvariantCulture);
+                _suppressRateTextChange = false;
+            }
+
+            _ratePresentationService.SetDisplayMode(source!, target!, newMode);
+            InvertToggle.IsChecked = newMode == FxRateDisplayMode.Inverted;
+            UpdateFieldStates();
         }
     }
 }

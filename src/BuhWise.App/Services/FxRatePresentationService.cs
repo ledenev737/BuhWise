@@ -1,6 +1,5 @@
 using System;
-using System.Collections.Generic;
-using BuhWise.Models;
+using BuhWise.Data;
 
 namespace BuhWise.Services
 {
@@ -12,29 +11,67 @@ namespace BuhWise.Services
 
     public interface IFxRatePresentationService
     {
-        FxRateDisplayMode GetDisplayMode(Currency fromCurrency, Currency toCurrency);
-
-        double ToDisplayRate(double internalRate, Currency fromCurrency, Currency toCurrency);
-
-        double ToInternalRate(double displayRate, Currency fromCurrency, Currency toCurrency);
+        FxRateDisplayMode GetDisplayMode(string fromCurrency, string toCurrency);
+        double ToDisplayRate(double internalRate, string fromCurrency, string toCurrency);
+        double ToInternalRate(double displayRate, string fromCurrency, string toCurrency);
+        void SetDisplayMode(string fromCurrency, string toCurrency, FxRateDisplayMode mode);
     }
 
     public class FxRatePresentationService : IFxRatePresentationService
     {
-        private readonly HashSet<(Currency From, Currency To)> _invertedPairs = new()
-        {
-            (Currency.RUB, Currency.USD),
-            (Currency.RUB, Currency.EUR)
-        };
+        private readonly DatabaseService _database;
 
-        public FxRateDisplayMode GetDisplayMode(Currency fromCurrency, Currency toCurrency)
+        public FxRatePresentationService(DatabaseService database)
         {
-            return _invertedPairs.Contains((fromCurrency, toCurrency))
-                ? FxRateDisplayMode.Inverted
-                : FxRateDisplayMode.Direct;
+            _database = database;
         }
 
-        public double ToDisplayRate(double internalRate, Currency fromCurrency, Currency toCurrency)
+        public FxRateDisplayMode GetDisplayMode(string fromCurrency, string toCurrency)
+        {
+            if (string.IsNullOrWhiteSpace(fromCurrency) || string.IsNullOrWhiteSpace(toCurrency))
+            {
+                return FxRateDisplayMode.Direct;
+            }
+
+            using var connection = _database.GetConnection();
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"SELECT DisplayMode FROM FxRateDisplayConfig
+                                    WHERE FromCurrencyCode = $from AND ToCurrencyCode = $to";
+            command.Parameters.AddWithValue("$from", fromCurrency);
+            command.Parameters.AddWithValue("$to", toCurrency);
+
+            var result = command.ExecuteScalar();
+            if (result is string text && Enum.TryParse(text, out FxRateDisplayMode parsed))
+            {
+                return parsed;
+            }
+
+            return FxRateDisplayMode.Direct;
+        }
+
+        public void SetDisplayMode(string fromCurrency, string toCurrency, FxRateDisplayMode mode)
+        {
+            if (string.IsNullOrWhiteSpace(fromCurrency) || string.IsNullOrWhiteSpace(toCurrency))
+            {
+                return;
+            }
+
+            using var connection = _database.GetConnection();
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"INSERT OR REPLACE INTO FxRateDisplayConfig (FromCurrencyCode, ToCurrencyCode, DisplayMode, UpdatedAt)
+                                    VALUES ($from, $to, $mode, $updated)";
+            command.Parameters.AddWithValue("$from", fromCurrency);
+            command.Parameters.AddWithValue("$to", toCurrency);
+            command.Parameters.AddWithValue("$mode", mode.ToString());
+            command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("o"));
+            command.ExecuteNonQuery();
+        }
+
+        public double ToDisplayRate(double internalRate, string fromCurrency, string toCurrency)
         {
             if (internalRate <= 0)
             {
@@ -42,12 +79,10 @@ namespace BuhWise.Services
             }
 
             var mode = GetDisplayMode(fromCurrency, toCurrency);
-            return mode == FxRateDisplayMode.Inverted
-                ? 1d / internalRate
-                : internalRate;
+            return mode == FxRateDisplayMode.Inverted ? 1d / internalRate : internalRate;
         }
 
-        public double ToInternalRate(double displayRate, Currency fromCurrency, Currency toCurrency)
+        public double ToInternalRate(double displayRate, string fromCurrency, string toCurrency)
         {
             if (displayRate <= 0)
             {
@@ -55,9 +90,7 @@ namespace BuhWise.Services
             }
 
             var mode = GetDisplayMode(fromCurrency, toCurrency);
-            return mode == FxRateDisplayMode.Inverted
-                ? 1d / displayRate
-                : displayRate;
+            return mode == FxRateDisplayMode.Inverted ? 1d / displayRate : displayRate;
         }
     }
 }

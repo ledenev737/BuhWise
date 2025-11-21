@@ -59,20 +59,23 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="0">
                     <TextBlock Text="Исходная валюта" Margin="0 0 0 4" />
-                    <ComboBox x:Name="SourceCurrencyBox" SelectedIndex="0" Height="28" SelectionChanged="CurrencyBox_SelectionChanged">
-                        <ComboBoxItem Content="USD" Tag="USD" />
-                        <ComboBoxItem Content="EUR" Tag="EUR" />
-                        <ComboBoxItem Content="RUB" Tag="RUB" />
-                    </ComboBox>
+                    <ComboBox x:Name="SourceCurrencyBox"
+                              SelectedIndex="0"
+                              Height="28"
+                              SelectionChanged="CurrencyBox_SelectionChanged"
+                              DisplayMemberPath="Code"
+                              SelectedValuePath="Code" />
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="2" Grid.Row="0">
                     <TextBlock Text="Конечная валюта" Margin="0 0 0 4" />
-                    <ComboBox x:Name="TargetCurrencyBox" SelectedIndex="1" Height="28" IsEnabled="False" SelectionChanged="CurrencyBox_SelectionChanged">
-                        <ComboBoxItem Content="USD" Tag="USD" />
-                        <ComboBoxItem Content="EUR" Tag="EUR" />
-                        <ComboBoxItem Content="RUB" Tag="RUB" />
-                    </ComboBox>
+                    <ComboBox x:Name="TargetCurrencyBox"
+                              SelectedIndex="1"
+                              Height="28"
+                              IsEnabled="False"
+                              SelectionChanged="CurrencyBox_SelectionChanged"
+                              DisplayMemberPath="Code"
+                              SelectedValuePath="Code" />
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="0" Grid.Row="1">
@@ -95,7 +98,21 @@
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="1" Grid.Row="1">
                     <TextBlock x:Name="RateLabel" Text="Курс" Margin="0 0 0 4" />
-                    <TextBox x:Name="RateBox" Height="28" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="RateBox" Height="28" Grid.Column="0" />
+                        <ToggleButton x:Name="InvertToggle"
+                                      Grid.Column="1"
+                                      Content="1/x"
+                                      Margin="6 0 0 0"
+                                      Padding="10,0"
+                                      IsEnabled="False"
+                                      Click="InvertToggle_Click"
+                                      ToolTip="Переключить режим отображения курса" />
+                    </Grid>
                 </StackPanel>
 
                 <StackPanel Orientation="Vertical" Margin="4" Grid.Column="2" Grid.Row="1">
@@ -206,6 +223,11 @@
                 <Button x:Name="HistoryButton"
                         Content="История изменений"
                         Click="OpenHistory_Click"
+                        Padding="12,6"
+                        Margin="0 0 8 0" />
+                <Button x:Name="ManageCurrenciesButton"
+                        Content="Валюты"
+                        Click="OpenCurrencies_Click"
                         Padding="12,6"
                         Margin="0 0 8 0" />
                 <Button x:Name="DeleteOperationButton"

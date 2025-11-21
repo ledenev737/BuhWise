@@ -27,6 +27,9 @@ namespace BuhWise.Data
             using var connection = GetConnection();
             connection.Open();
 
+            CreateCurrencyTable(connection);
+            CreateFxDisplayConfigTable(connection);
+
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = @"CREATE TABLE IF NOT EXISTS Operations (
@@ -92,12 +95,78 @@ namespace BuhWise.Data
                 command.ExecuteNonQuery();
             }
 
-            EnsureCurrencyRows(connection, "USD");
-            EnsureCurrencyRows(connection, "EUR");
-            EnsureCurrencyRows(connection, "RUB");
+            SeedCurrencyIfMissing(connection, "USD", "US Dollar");
+            SeedCurrencyIfMissing(connection, "EUR", "Euro");
+            SeedCurrencyIfMissing(connection, "RUB", "Russian Ruble");
+            SeedFxDisplayDefaults(connection);
+            EnsureCurrencyRows(connection);
         }
 
-        private static void EnsureCurrencyRows(SqliteConnection connection, string currency)
+        private static void CreateCurrencyTable(SqliteConnection connection)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"CREATE TABLE IF NOT EXISTS Currencies (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Code TEXT NOT NULL UNIQUE,
+                    Name TEXT NOT NULL,
+                    IsActive INTEGER NOT NULL DEFAULT 1
+                );";
+            command.ExecuteNonQuery();
+        }
+
+        private static void CreateFxDisplayConfigTable(SqliteConnection connection)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"CREATE TABLE IF NOT EXISTS FxRateDisplayConfig (
+                    FromCurrencyCode TEXT NOT NULL,
+                    ToCurrencyCode TEXT NOT NULL,
+                    DisplayMode TEXT NOT NULL,
+                    UpdatedAt TEXT NULL,
+                    PRIMARY KEY (FromCurrencyCode, ToCurrencyCode)
+                );";
+            command.ExecuteNonQuery();
+        }
+
+        private static void SeedCurrencyIfMissing(SqliteConnection connection, string code, string name)
+        {
+            using var insert = connection.CreateCommand();
+            insert.CommandText = @"INSERT OR IGNORE INTO Currencies (Code, Name, IsActive) VALUES ($code, $name, 1)";
+            insert.Parameters.AddWithValue("$code", code);
+            insert.Parameters.AddWithValue("$name", name);
+            insert.ExecuteNonQuery();
+        }
+
+        private static void SeedFxDisplayDefaults(SqliteConnection connection)
+        {
+            InsertDisplayConfig(connection, "RUB", "USD", "Inverted");
+            InsertDisplayConfig(connection, "RUB", "EUR", "Inverted");
+        }
+
+        private static void InsertDisplayConfig(SqliteConnection connection, string from, string to, string mode)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"INSERT OR IGNORE INTO FxRateDisplayConfig (FromCurrencyCode, ToCurrencyCode, DisplayMode, UpdatedAt)
+                                    VALUES ($from, $to, $mode, $updated)";
+            command.Parameters.AddWithValue("$from", from);
+            command.Parameters.AddWithValue("$to", to);
+            command.Parameters.AddWithValue("$mode", mode);
+            command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("o"));
+            command.ExecuteNonQuery();
+        }
+
+        private static void EnsureCurrencyRows(SqliteConnection connection)
+        {
+            using var read = connection.CreateCommand();
+            read.CommandText = "SELECT Code FROM Currencies WHERE IsActive = 1";
+            using var reader = read.ExecuteReader();
+            while (reader.Read())
+            {
+                var code = reader.GetString(0);
+                EnsureCurrencyRows(connection, code);
+            }
+        }
+
+        public static void EnsureCurrencyRows(SqliteConnection connection, string currency)
         {
             using (var insertBalance = connection.CreateCommand())
             {

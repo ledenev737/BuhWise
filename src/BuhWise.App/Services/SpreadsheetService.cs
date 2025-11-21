@@ -51,9 +51,9 @@ namespace BuhWise.Services
                 worksheet.Cell(row, 1).Value = operation.Id;
                 worksheet.Cell(row, 2).Value = operation.Date;
                 worksheet.Cell(row, 3).Value = operation.Type.ToString();
-                worksheet.Cell(row, 4).Value = operation.SourceCurrency.ToString();
+                worksheet.Cell(row, 4).Value = operation.SourceCurrency;
                 worksheet.Cell(row, 5).Value = operation.SourceAmount;
-                worksheet.Cell(row, 6).Value = operation.TargetCurrency.ToString();
+                worksheet.Cell(row, 6).Value = operation.TargetCurrency;
                 worksheet.Cell(row, 7).Value = operation.TargetAmount;
                 worksheet.Cell(row, 8).Value = operation.Rate;
                 worksheet.Cell(row, 9).Value = operation.Commission;
@@ -184,10 +184,14 @@ namespace BuhWise.Services
         {
             return operation.Type switch
             {
-                OperationType.Income => operation.SourceCurrency == Currency.USD ? operation.SourceAmount : operation.SourceAmount * operation.Rate,
-                OperationType.Expense => operation.SourceCurrency == Currency.USD ? operation.SourceAmount : operation.SourceAmount * operation.Rate,
-                OperationType.Exchange when operation.TargetCurrency == Currency.USD => operation.TargetAmount,
-                OperationType.Exchange when operation.SourceCurrency == Currency.USD => operation.SourceAmount,
+                OperationType.Income => string.Equals(operation.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase)
+                    ? operation.SourceAmount
+                    : operation.SourceAmount * operation.Rate,
+                OperationType.Expense => string.Equals(operation.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase)
+                    ? operation.SourceAmount
+                    : operation.SourceAmount * operation.Rate,
+                OperationType.Exchange when string.Equals(operation.TargetCurrency, "USD", StringComparison.OrdinalIgnoreCase) => operation.TargetAmount,
+                OperationType.Exchange when string.Equals(operation.SourceCurrency, "USD", StringComparison.OrdinalIgnoreCase) => operation.SourceAmount,
                 _ => null
             };
         }
@@ -204,46 +208,47 @@ namespace BuhWise.Services
             };
         }
 
-        private static Currency ParseCurrency(string value)
+        private static string ParseCurrency(string value)
         {
-            if (Enum.TryParse(value.Trim(), true, out Currency currency))
+            var normalized = value.Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(normalized))
             {
-                return currency;
+                throw new InvalidOperationException("Пустое значение валюты");
             }
 
-            throw new InvalidOperationException($"Неизвестная валюта: {value}");
-        }
-
-        private static double ReadDouble(IXLCell cell, string columnName, int row)
-        {
-            if (cell.TryGetValue<double>(out var value))
-            {
-                return value;
-            }
-
-            var raw = cell.GetString();
-            if (double.TryParse(raw.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out value))
-            {
-                return value;
-            }
-
-            throw new InvalidOperationException($"Некорректное значение в столбце \"{columnName}\" (строка {row})");
+            return normalized;
         }
 
         private static DateTime ReadDate(IXLCell cell, int row)
         {
-            if (cell.TryGetValue<DateTime>(out var date))
+            if (cell.TryGetValue(out DateTime date))
             {
                 return date;
             }
 
-            var raw = cell.GetString();
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out date))
+            var text = cell.GetString();
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
             {
-                return date;
+                return parsed;
             }
 
             throw new InvalidOperationException($"Некорректная дата в строке {row}");
+        }
+
+        private static double ReadDouble(IXLCell cell, string column, int row)
+        {
+            if (cell.TryGetValue(out double value))
+            {
+                return value;
+            }
+
+            var text = cell.GetString();
+            if (double.TryParse(text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+
+            throw new InvalidOperationException($"Некорректное значение {column} в строке {row}");
         }
     }
 }
