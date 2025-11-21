@@ -16,6 +16,7 @@
         <DataGrid x:Name="HistoryGrid"
                   AutoGenerateColumns="False"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                   Background="#202020"
                   Foreground="#EEEEEE"
                   RowBackground="#202020"
@@ -33,14 +34,32 @@
             <DataGrid.Resources>
                 <Style TargetType="DataGridRow">
                     <Setter Property="Foreground" Value="#EEEEEE" />
-                    <Setter Property="Background" Value="{x:Null}" />
+                    <Setter Property="Background" Value="#202020" />
                     <Setter Property="BorderBrush" Value="#444444" />
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#2E2E32" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#4A90E2" />
+                            <Setter Property="Foreground" Value="Black" />
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
                 <Style TargetType="DataGridCell">
                     <Setter Property="Foreground" Value="#EEEEEE" />
                     <Setter Property="Background" Value="{x:Null}" />
                     <Setter Property="BorderBrush" Value="#444444" />
                     <Setter Property="BorderThickness" Value="0.5" />
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#333337" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Foreground" Value="Black" />
+                            <Setter Property="Background" Value="{x:Null}" />
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
                 <Style TargetType="DataGridColumnHeader">
                     <Setter Property="Foreground" Value="White" />
