@@ -291,6 +291,11 @@ namespace BuhWise
         private void OpenHistory_Click(object sender, RoutedEventArgs e)
         {
             var history = new HistoryWindow(_repository) { Owner = this };
+            history.OperationRestored += (_, _) =>
+            {
+                LoadOperations();
+                RefreshBalances();
+            };
             history.ShowDialog();
         }
 

@@ -8,6 +8,11 @@
         Background="#1E1E1E"
         Foreground="White">
     <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
         <DataGrid x:Name="HistoryGrid"
                   AutoGenerateColumns="False"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
@@ -22,7 +27,9 @@
                   VerticalGridLinesBrush="#444444"
                   HeadersVisibility="Column"
                   IsReadOnly="True"
-                  CanUserAddRows="False">
+                  CanUserAddRows="False"
+                  SelectionMode="Single"
+                  SelectionChanged="HistoryGrid_SelectionChanged">
             <DataGrid.Resources>
                 <Style TargetType="DataGridRow">
                     <Setter Property="Foreground" Value="#EEEEEE" />
@@ -50,5 +57,16 @@
                 <DataGridTextColumn Header="Детали" Binding="{Binding Details}" Width="*" />
             </DataGrid.Columns>
         </DataGrid>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0 8 0 0">
+            <Button x:Name="RestoreButton"
+                    Content="Восстановить операцию"
+                    Padding="12,6"
+                    IsEnabled="False"
+                    Click="RestoreButton_Click" />
+        </StackPanel>
     </Grid>
 </Window>

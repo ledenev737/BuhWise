@@ -87,21 +87,7 @@ namespace BuhWise.Data
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                operations.Add(new Operation
-                {
-                    Id = reader.GetInt64(0),
-                    Date = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
-                    Type = Enum.Parse<OperationType>(reader.GetString(2)),
-                    SourceCurrency = reader.GetString(3),
-                    SourceAmount = reader.GetDouble(4),
-                    TargetCurrency = reader.GetString(5),
-                    TargetAmount = reader.GetDouble(6),
-                    Rate = reader.GetDouble(7),
-                    Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
-                    UsdEquivalent = reader.GetDouble(9),
-                    ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
-                    ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
-                });
+                operations.Add(MapOperation(reader));
             }
 
             return operations;
@@ -225,6 +211,35 @@ namespace BuhWise.Data
             TryLogOperationChange(operation, "Delete", reason, connection, transaction);
 
             transaction.Commit();
+        }
+
+        public Operation RestoreOperationFromChange(OperationChange change)
+        {
+            if (!string.Equals(change.Action, "Delete", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Выбранная запись не относится к удалению и не может быть восстановлена.");
+            }
+
+            var restoredFromSnapshot = DeserializeOperationSnapshot(change.Details);
+            if (restoredFromSnapshot is null)
+            {
+                throw new InvalidOperationException("Не удалось восстановить данные операции из истории.");
+            }
+
+            using var connection = _database.GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            EnsureCurrencyExists(connection, transaction, restoredFromSnapshot.SourceCurrency);
+            EnsureCurrencyExists(connection, transaction, restoredFromSnapshot.TargetCurrency);
+
+            // Повторное восстановление одной и той же записи допустимо и приведет к дубликату содержимого (новый Id).
+            InsertOperation(restoredFromSnapshot, connection, transaction);
+            RebuildDerivedState(connection, transaction);
+            TryLogOperationChange(restoredFromSnapshot, "Restore", $"Restored from change #{change.Id}", connection, transaction);
+
+            transaction.Commit();
+            return restoredFromSnapshot;
         }
 
         public void ReplaceAllOperations(IEnumerable<Operation> operations)
@@ -358,6 +373,20 @@ namespace BuhWise.Data
             clear.Transaction = transaction;
             clear.CommandText = "DELETE FROM ExchangeRateMemory";
             clear.ExecuteNonQuery();
+        }
+
+        private void RebuildDerivedState(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            ResetBalances(connection, transaction);
+            ResetRates(connection, transaction);
+            ResetRateMemory(connection, transaction);
+
+            foreach (var operation in GetOrderedOperations(connection, transaction))
+            {
+                UpdateBalances(operation, connection, transaction);
+                UpdateRates(operation, connection, transaction);
+                UpdateRateMemory(operation, connection, transaction);
+            }
         }
 
         private static void UpdateBalances(Operation operation, SqliteConnection connection, SqliteTransaction transaction)
@@ -556,21 +585,7 @@ namespace BuhWise.Data
                 return null;
             }
 
-            return new Operation
-            {
-                Id = reader.GetInt64(0),
-                Date = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
-                Type = Enum.Parse<OperationType>(reader.GetString(2)),
-                SourceCurrency = reader.GetString(3),
-                SourceAmount = reader.GetDouble(4),
-                TargetCurrency = reader.GetString(5),
-                TargetAmount = reader.GetDouble(6),
-                Rate = reader.GetDouble(7),
-                Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
-                UsdEquivalent = reader.GetDouble(9),
-                ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
-                ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
-            };
+            return MapOperation(reader);
         }
 
         private static Operation NormalizeOperation(Operation operation)
@@ -663,6 +678,92 @@ namespace BuhWise.Data
             }
 
             DatabaseService.EnsureCurrencyRows(connection, code);
+        }
+
+        private static Operation? DeserializeOperationSnapshot(string details)
+        {
+            try
+            {
+                var snapshot = JsonSerializer.Deserialize<OperationSnapshot>(details);
+                if (snapshot is null)
+                {
+                    return null;
+                }
+
+                return new Operation
+                {
+                    Id = snapshot.Id,
+                    Date = DateTime.Parse(snapshot.Date, CultureInfo.InvariantCulture),
+                    Type = Enum.Parse<OperationType>(snapshot.Type, true),
+                    SourceCurrency = snapshot.SourceCurrency ?? string.Empty,
+                    SourceAmount = snapshot.SourceAmount,
+                    TargetCurrency = snapshot.TargetCurrency ?? snapshot.SourceCurrency ?? string.Empty,
+                    TargetAmount = snapshot.TargetAmount,
+                    Rate = snapshot.Rate,
+                    Commission = snapshot.Commission,
+                    UsdEquivalent = snapshot.UsdEquivalent,
+                    ExpenseCategory = snapshot.ExpenseCategory,
+                    ExpenseComment = snapshot.ExpenseComment
+                };
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to deserialize operation snapshot: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static List<Operation> GetOrderedOperations(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            var operations = new List<Operation>();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = @"SELECT Id, Date, Type, SourceCurrency, SourceAmount, TargetCurrency, TargetAmount, Rate, Commission, UsdEquivalent, ExpenseCategory, ExpenseComment
+                                    FROM Operations
+                                    ORDER BY Date, Id";
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                operations.Add(MapOperation(reader));
+            }
+
+            return operations;
+        }
+
+        private static Operation MapOperation(SqliteDataReader reader)
+        {
+            return new Operation
+            {
+                Id = reader.GetInt64(0),
+                Date = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
+                Type = Enum.Parse<OperationType>(reader.GetString(2)),
+                SourceCurrency = reader.GetString(3),
+                SourceAmount = reader.GetDouble(4),
+                TargetCurrency = reader.GetString(5),
+                TargetAmount = reader.GetDouble(6),
+                Rate = reader.GetDouble(7),
+                Commission = reader.IsDBNull(8) ? null : reader.GetDouble(8),
+                UsdEquivalent = reader.GetDouble(9),
+                ExpenseCategory = reader.IsDBNull(10) ? null : reader.GetString(10),
+                ExpenseComment = reader.IsDBNull(11) ? null : reader.GetString(11)
+            };
+        }
+
+        private class OperationSnapshot
+        {
+            public long Id { get; set; }
+            public string Date { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public string? SourceCurrency { get; set; }
+            public double SourceAmount { get; set; }
+            public string? TargetCurrency { get; set; }
+            public double TargetAmount { get; set; }
+            public double Rate { get; set; }
+            public double? Commission { get; set; }
+            public double UsdEquivalent { get; set; }
+            public string? ExpenseCategory { get; set; }
+            public string? ExpenseComment { get; set; }
         }
     }
 }
