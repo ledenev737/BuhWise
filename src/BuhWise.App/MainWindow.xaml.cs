@@ -234,18 +234,33 @@ namespace BuhWise
 
         private void OperationTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             UpdateFieldStates();
             MaybePrefillRateFromMemory();
         }
 
         private void CurrencyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             UpdateFieldStates();
             MaybePrefillRateFromMemory();
         }
 
         private void OperationsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             UpdateDeleteButtonState();
         }
 
@@ -308,6 +323,11 @@ namespace BuhWise
 
         private void UpdateFieldStates()
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             var type = GetSelectedOperationType();
             var isExchange = type == OperationType.Exchange;
             var isExpense = type == OperationType.Expense;
@@ -317,27 +337,56 @@ namespace BuhWise
                 ? _ratePresentationService.GetDisplayMode(sourceCurrency!, targetCurrency!)
                 : FxRateDisplayMode.Direct;
 
-            TargetCurrencyBox.IsEnabled = isExchange;
-            RateBox.IsEnabled = isExchange;
-            FeeBox.IsEnabled = isExchange;
-            MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
-            InvertToggle.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
-            InvertToggle.IsEnabled = isExchange && hasSource && hasTarget;
-            InvertToggle.IsChecked = mode == FxRateDisplayMode.Inverted;
-
-            ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
-            ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
-
-            if (isExchange && hasSource && hasTarget)
+            if (TargetCurrencyBox != null)
             {
-                var label = mode == FxRateDisplayMode.Inverted
-                    ? $"Курс ({targetCurrency}/{sourceCurrency})"
-                    : "Курс";
-                RateLabel.Text = label;
+                TargetCurrencyBox.IsEnabled = isExchange;
             }
-            else
+
+            if (RateBox != null)
             {
-                RateLabel.Text = "Курс";
+                RateBox.IsEnabled = isExchange;
+            }
+
+            if (FeeBox != null)
+            {
+                FeeBox.IsEnabled = isExchange;
+            }
+
+            if (MaxAmountButton != null)
+            {
+                MaxAmountButton.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (InvertToggle != null)
+            {
+                InvertToggle.Visibility = isExchange ? Visibility.Visible : Visibility.Collapsed;
+                InvertToggle.IsEnabled = isExchange && hasSource && hasTarget;
+                InvertToggle.IsChecked = mode == FxRateDisplayMode.Inverted;
+            }
+
+            if (ExpenseCategoryPanel != null)
+            {
+                ExpenseCategoryPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (ExpenseCommentPanel != null)
+            {
+                ExpenseCommentPanel.Visibility = isExpense ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (RateLabel != null)
+            {
+                if (isExchange && hasSource && hasTarget)
+                {
+                    var label = mode == FxRateDisplayMode.Inverted
+                        ? $"Курс ({targetCurrency}/{sourceCurrency})"
+                        : "Курс";
+                    RateLabel.Text = label;
+                }
+                else
+                {
+                    RateLabel.Text = "Курс";
+                }
             }
 
             if (!isExchange)
@@ -349,7 +398,15 @@ namespace BuhWise
 
         private void UpdateDeleteButtonState()
         {
-            DeleteOperationButton.IsEnabled = OperationsGrid?.SelectedItem is Operation;
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            if (DeleteOperationButton != null)
+            {
+                DeleteOperationButton.IsEnabled = OperationsGrid?.SelectedItem is Operation;
+            }
         }
 
         private OperationType GetSelectedOperationType()
@@ -379,6 +436,11 @@ namespace BuhWise
 
         private void RateBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             if (_suppressRateTextChange)
             {
                 return;
@@ -389,6 +451,11 @@ namespace BuhWise
 
         private void MaybePrefillRateFromMemory()
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             if (RateBox == null)
             {
                 return;
@@ -547,6 +614,11 @@ namespace BuhWise
 
         private void InvertToggle_Click(object sender, RoutedEventArgs e)
         {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
             if (GetSelectedOperationType() != OperationType.Exchange)
             {
                 return;
