@@ -28,7 +28,7 @@ namespace BuhWise
         {
             InitializeComponent();
 
-            var dbPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "buhwise.db");
+            var dbPath = AppPaths.DatabasePath;
             _database = new DatabaseService(dbPath);
             _repository = new OperationRepository(_database);
             _ratePresentationService = new FxRatePresentationService(_database);
